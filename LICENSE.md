@@ -1,3 +1,8 @@
+
+This is only a guide please check the full license [here](https://creativecommons.org/licenses/by-nc-nd/4.0/).
+
+---
+
 Creative Commons — Attribution-NonCommercial-NoDerivatives 4.0 International — CC BY-NC-ND 4.0        
 
 

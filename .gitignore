@@ -1,4 +1,5 @@
-.Rproj.user
-.Rhistory
-.RData
-.Ruserdata
+# Anything that contains ignore
+*ignore*
+
+# Anything that contains debug
+*debug*
