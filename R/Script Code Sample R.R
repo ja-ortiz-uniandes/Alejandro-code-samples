@@ -12,13 +12,16 @@
 
 # This is the an exercise that models a question from DIME.
 
+# Clustered vs. Stratified vs. Systematic Sampling
+
+
 # Set up                                                                    ----
 
 
 # Clean - R's environment
 # .rs.restartR()
 cat("\f")
-dev.off()
+# dev.off()
 remove(list = ls())
 gc(full = T)
 
@@ -53,7 +56,7 @@ l <- list()
 l$params$max_hh_sample_per_vil <- 50
 
 
-# Maximum number of villages sampled
+# Maximum number of villages sampled per treatment group
 l$params$max_vil_sampled <- 50
 
 
@@ -73,8 +76,8 @@ l$params$effect_size_step <- 0.05
 l$params$nu_simulations <- 10^4
 
 
-# Maximum number of villages in the population
-l$params$vil_in_universe <- 200
+# Minimum number of villages in the population
+l$params$min_vils_in_universe <- 200
 
 
 # Minimum number of HH per village in population
@@ -121,13 +124,62 @@ l$opts$selct_params_in_file <- list("eff" = quote(eff_size))
 
 
 
-# Clustered vs. Stratified vs. Systematic Sampling                          ----
+# Simulations                                                               ----
+
+
+# Function to generate a random village
+gen_village <- function() {
+
+
+  # Select a village size
+  vil_size <- sample(l$params$min_vil_size:l$params$max_vil_size, size = 1)
+
+
+  # Select if village will be treated or not
+  treatment <- sample(0:1,
+                      size = 1,
+                      prob = c(1 - l$params$prob_vil_is_treated,
+                               l$params$prob_vil_is_treated)
+  )
+
+
+  # Create a village data set
+  tmp_vil <- data.table(
+
+    # Village ID
+    "village" = village,
+
+    # Within-village Household ID
+    "household" = 1:vil_size,
+
+    # Create baseline score
+    "baseline" = rnorm(vil_size,
+
+                       # Mean depends on the village
+                       mean = runif(1,
+                                    min = l$params$bl_min_mean_val,
+                                    max = l$params$bl_max_mean_val),
+
+                       # SD depends on village
+                       sd = runif(1,
+                                  min = l$params$bl_min_sd_val,
+                                  max = l$params$bl_max_sd_val)),
+
+
+    # Treatment status - village-wide effect
+    "treatead" = treatment %>% rep(vil_size))
+
+
+  # Concatenate village data set with all previous villages
+  return(tmp_vil)
+
+}
 
 
 ## Parallelization
 
 # plan for future processes
-plan(multiprocess)
+plan(multisession)
 
 
 # Parallelization function
@@ -150,7 +202,7 @@ change_hh_size <-
     require(fixest)
 
     # Pre-allocate space for results into memory
-    tmp <- vector(length = max_nu_hh_per_vil)
+    pval_results <- vector(length = max_nu_hh_per_vil)
 
 
     # Loop over HHs sampled in each village
@@ -169,38 +221,47 @@ change_hh_size <-
 
 
       # From a simple OLS - get the p-value for treated dummy
-      tmp[nu_hh] <-
 
-        # OLS
-        feols(outcome ~ baseline + treatead,
-              data = universe[
 
-                # Only villages in sample
-                v_sample, on = "village"
+      tryCatch(
+        expr = {
+          tmp <<-
+            feols(outcome ~ baseline + treatead,
+                  data = universe[
 
-                # Sample a of hh in each village
-              ][, .SD[sample(.N, size = min(.N, nu_hh))],
-                by = village]
+                    # Only villages in sample
+                    v_sample, on = "village"
 
-              # Grab p-value for treated dummy
-        )[["coeftable"]][["Pr(>|t|)"]][3]
+                    # Sample a of hh in each village
+                  ][, .SD[sample(.N, size = min(.N, nu_hh))],
+                    by = village]
+
+                  # Grab p-value for treated dummy
+            )[["coeftable"]][["Pr(>|t|)"]][3]
+        },
+
+        warning = function(war) {}
+      )
+
+      # Save to result vector
+      pval_results[nu_hh] <- tmp
 
     }
 
-
     # Result is the vector of p-values - for that Nu. of villages in each
     # treatment group
-    return(tmp)
+    return(pval_results)
   }
 
 
 # Loop over effect size
-for (eff_size in seq(
+for (
+  eff_size in seq(
 
-  from = l$params$min_effect_size,
-  to = l$params$max_effect_size,
-  by = l$params$effect_size_step)
-
+    from = l$params$min_effect_size,
+    to = l$params$max_effect_size,
+    by = l$params$effect_size_step
+  )
 ) {
 
 
@@ -211,7 +272,7 @@ for (eff_size in seq(
     # row number is equal to number of villager per treatment group
 
     ncol = l$params$max_hh_sample_per_vil)
-    # column number is equal to number of HHs per village
+  # column number is equal to number of HHs per village
 
 
   # Matrix must not be NA or operations will only yield NA
@@ -230,50 +291,31 @@ for (eff_size in seq(
 
 
     # Creating the universe - loop over villages
-    for (village in 1:l$params$vil_in_universe) {
+    for (village in 1:l$params$min_vils_in_universe) {
+
+      vil_hh_u <- rbind(vil_hh_u, gen_village())
+
+    }
 
 
-      # Select a village size
-      vil_size <- sample(l$params$min_vil_size:l$params$max_vil_size, size = 1)
+    ## Contingency in case treatment or control groups are too small
+
+    # Size of the smallest treatment group
+    smallest_group <-
+      vil_hh_u[, .(nu_vils = uniqueN(.SD, by = "village")), by = treatead
+      ][, min(nu_vils)]
 
 
-      # Select if village will be treated or not
-      treatment <- sample(0:1,
-                          size = 1,
-                          prob = c(1 - l$params$prob_vil_is_treated,
-                                   l$params$prob_vil_is_treated)
-                          )
+    # Guarantee that there are enough villages in both treatment groups
+    while (smallest_group < l$params$max_vil_sampled) {
 
+      vil_hh_u <- rbind(vil_hh_u, gen_village())
 
-      # Create a village data set
-      tmp_vil <- data.table(
+      # Size of the smallest treatment group
+      smallest_group <-
+        vil_hh_u[, .(nu_vils = uniqueN(.SD, by = "village")), by = treatead
+        ][, min(nu_vils)]
 
-        # Village ID
-        "village" = village,
-
-        # Within-village Household ID
-        "household" = 1:vil_size,
-
-        # Create baseline score
-        "baseline" = rnorm(vil_size,
-
-                           # Mean depends on the village
-                           mean = runif(1,
-                                        min = l$params$bl_min_mean_val,
-                                        max = l$params$bl_max_mean_val),
-
-                           # SD depends on village
-                           sd = runif(1,
-                                      min = l$params$bl_min_sd_val,
-                                      max = l$params$bl_max_sd_val)),
-
-
-        # Treatment status - village-wide effect
-        "treatead" = treatment %>% rep(vil_size))
-
-
-      # Concatenate village data set with all previous villages
-      vil_hh_u <- rbind(vil_hh_u, tmp_vil)
     }
 
 
@@ -296,16 +338,11 @@ for (eff_size in seq(
 
     # Runs for different village sample sizes the effect of varying
     # household sample size
-    p_result <- clusterApply(clusters,
-                             x = 1:l$params$max_vil_sampled,
-                             fun = change_hh_size,
-                             universe = vil_hh_u)
-
-future_map(1:l$params$max_vil_sampled,
-           .f = change_hh_size,
-           universe = vil_hh_u,
-           .options = furrr_options(seed = T),
-           .progress = T)
+    p_result <- future_map(1:l$params$max_vil_sampled,
+                           .f = change_hh_size,
+                           universe = vil_hh_u,
+                           .progress = T,
+                           .options = furrr_options(seed = T))
 
 
     # Unlist results into a matrix
@@ -318,7 +355,7 @@ future_map(1:l$params$max_vil_sampled,
     # Warn if there are NAs, then replace NA's with 0
     if (any(is.na(tmp_mat))) {
       warning(
-        paste0("NAs detected. effect size: ", eff_size,
+        paste0("NAs detected for effect size: ", eff_size,
                " Iteration: ", iter)
       )
     }
@@ -332,18 +369,21 @@ future_map(1:l$params$max_vil_sampled,
     # Verbalize iteration and time
     cat(
       paste0(
-        "\n\nFinished cycle: ", iter, " - for effect size: ", eff_size,
-        "\n", Sys.time())
-      )
+        "\nFinished cycle: ", iter, " - for effect size: ", eff_size,
+        "\n", Sys.time(), "\n")
+    )
 
     flush.console()
-
 
   }
 
 
   # Calculate average p-value
   avg_pvals <- m_pvals / l$params$nu_simulations
+
+
+  # Sample size of 2 is too small
+  avg_pvals[1, 1] <- NA
 
 
   # Save full list of hyper parameters?
@@ -369,10 +409,12 @@ future_map(1:l$params$max_vil_sampled,
 
 
   # Save result
-  fwrite(avg_pvals, paste0("Outputs/HH - Village surface/",
-                   "Homogeneous effects ",
-                   file_details,
-                   ".csv"), yaml = T)
+  fwrite(avg_pvals %>% as.data.table,
+         paste0("Outputs/HH - Village surface/",
+                "Homogeneous effects ",
+                file_details,
+                ".csv"),
+         yaml = T)
 
 }
 
