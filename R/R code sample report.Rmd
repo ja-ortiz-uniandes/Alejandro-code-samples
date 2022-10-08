@@ -1,7 +1,7 @@
 ---
 title: "R code sample - Simulation"
 author: "Alejandro Ortiz - ja.ortiz@uniandes.edu.co"
-date: "2022-09-22"
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
 output: 
         html_document:
                 toc: true # Table of contents
@@ -13,6 +13,24 @@ abstract: |
   In this report I will answer this question through the use of simulation techniques in which programs with different effect sizes are implemented on a sample of randomly selected villages. I will also go over some of the theory and intuition for the answer and take this opportunity to talk about some sampling techniques, mainly on clustered sampling vs. stratified sampling vs. systematic sampling. However, the main objective of this report is to demonstrate my skills in `R` as such this document will mainly focus on the *code* itself.
 ---
 
+<!-- ```{css, echo=FALSE} -->
+
+<!-- .tocify .tocify-header { -->
+
+<!--     position: fixed; -->
+
+<!--     top: 50px; -->
+
+<!--     left: 50px; -->
+
+<!--     width: 500px; -->
+
+<!--     height: 200px; -->
+
+<!-- } -->
+
+<!-- ``` -->
+
 ```{=html}
 <style type = "text/css">
 
@@ -21,7 +39,7 @@ body{ /* Normal  */
       text-align: justify
   }
 td {  /* Table  */
-  font-size: 8px;
+  <!-- font-size: 8px; -->
 }
 h1.title {
   font-size: 40px;
@@ -162,9 +180,6 @@ l$opts$selct_params_in_file <- list("eff" = quote(eff_size))
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
-
-
 # A few words on what makes good code
 
 for any given problem there are many different solutions and paths. While some paths may be more efficient or shorter than others. There are two necessary conditions for good code. Good code must be:
@@ -178,7 +193,7 @@ One can not come at the expense of the other. These principles are behind every 
 
 One of the most important ways to create good code is to follow good coding practices from the beginning, as going back to fix things will always be costlier than starting out the right way. Throughout this report you will see blue text boxes that explain some of the styling decisions made throughout the script to guarantee the functionality and readability.
 
-``` {r class.source = "bg-info text-info", eval=F}
+```{r class.source = "bg-info text-info", eval=F}
 This is an example of a style textbox.
 ```
 
@@ -454,7 +469,6 @@ library(tidyverse)
 library(data.table)
 ```
 
-
 ```{r class.output = "bg-info text-info", echo=F, comment=NA }
 cat('options(java.parameters = "-Xmx8000m")
 Is useful when working with rJava, even though it is not used here I keep it in the set up as a reminder that Java can run into memory problems if this setting is not enabled. This way if in the future any Java is used this option can be easily enabled.')
@@ -540,7 +554,7 @@ l$opts$selct_params_in_file <- list("eff" = quote(eff_size))
 
 ```
 
-```{r class.output = "bg-info text-info", echo=F, comment=NA }
+```{r class.output = "bg-info text-info", echo=F, comment=NA}
 cat('Hyper parameters are placed on a list so they are 1) easy to acess while 2) ony taking up 1 slot in the global environement')
 ```
 
@@ -548,5 +562,175 @@ In the future, warning and error handling will be applied to make sure that all 
 
 ## Simulations
 
-The thirs code section is titled `Simulations` this is where the actual simulations take place. **I highly recommend you change the hyper parameters before you attempt to run this section** as the default values can be quite onerous on your system. It took me around one day to execute this part alone. This, in spite of the code being fully parallelepiped and achieving a consistent CPU utilization of over 99% on all cores.
+The third code section is titled `Simulations` this is where the actual simulations take place. **I highly recommend you change the hyper parameters before you attempt to run this section** as the default values can be quite onerous on your system. It took me around one day to execute this part alone. This, in spite of the code being fully parallelelized and achieving a consistent CPU utilization of over 99% on all cores.
+
+This section begins by defining the `gen_village()` and `change_hh_size()` functions, much like with the hyper parameters, looking at this functions without knowing what contexts they are used in isn't very informative so we will skip them for now with the promise to dive in deeper into their process once they are called.
+
+There are two other things at the beginning of this section that *are* worth remaking upon. The first one is the the paralellization plan (in this case using `furrr`'s `multisesion`). The second is the beginning of a loop through different effect sizes:
+
+```{r, eval=F}
+# plan for future processes
+plan(multisession)
+
+
+# Loop over effect size
+for (
+  eff_size in seq(
+
+    from = l$params$min_effect_size,
+    to = l$params$max_effect_size,
+    by = l$params$effect_size_step
+  )
+) { ...
+```
+
+As you can see the loop will iterate over a list that starts at the minimum effect size `min_effect_size` through the maximum effect size `max_effect_size` in specified valued increments of `effect_size_step` (as a reminder, all objects prefixed by `l$params$` are user defined hyper parameters).
+
+The loop starts off by creating a template in which results will be stored. This is a matrix titled `m_pvals` (`m` for matrix and `pvals` since it will store p-values):
+
+```{r, eval=F}
+  ...
+
+  # Pre-allocate memory to results
+  m_pvals <- matrix(
+
+    nrow = l$params$max_vil_sampled,
+    # row number is equal to number of villager per treatment group
+
+    ncol = l$params$max_hh_sample_per_vil)
+  # column number is equal to number of HHs per village
+
+
+  # Matrix must not be NA or operations will only yield NA
+  m_pvals[is.na(m_pvals)] <- 0
+  
+  ...
+
+```
+
+As noted in the comments, in this matrix columns represent the number of households sampled per village and rows represent the number of villages per treatment group. This is to say that the value $m\_pvals_{ij}$ represents the p-value for a sample of $i$ villages in both the treatment and control groups with $j$ households in each village where the total sample size is $i \times j \times 2$ (2 because there are two treatment groups).
+
+These matrix is then filled with 0's. This is done so that operations (like addition) don't result in `NA`s.
+
+After this, a nested loop starts, this loop will iterate the simulation experiment `nu_simulations` (1000x by default) and average the results at the end:
+
+```{r, eval=F}
+  ...
+  # Simulate results many times
+  for (iter in 1:l$params$nu_simulations) {
+
+    # Set a fixed seed for reproducibility
+    set.seed(1944 + iter) # Year of Bretton woods
+
+
+    # Template of village-household universe
+    vil_hh_u <- data.table()
+
+
+    # Creating the universe - loop over villages
+    for (village in 1:l$params$min_vils_in_universe) {
+
+      vil_hh_u <- rbind(vil_hh_u, gen_village())
+
+    }
+    ...
+
+```
+
+To guarantee reproducibility since this loop will use quasi-random number generators, the seed is set to an arbitrary value that changes with every iteration. In this case since the question came from DIME, it seemed fitting to set the seed's fixed component to the year of the [Bretton Woods conference](https://en.wikipedia.org/wiki/Bretton_Woods_Conference) that resulted in the [modern international economic system](https://en.wikipedia.org/wiki/Bretton_Woods_system).
+
+Then there is another nested loop, this loop is in charge of generating the universe of all villages and households, so it runs `min_vils_in_universe` (default: 200) times, once for each village. On each iteration it concatenates the result of the new village with all the previous results.
+
+Each village is created using the `gen_village()` function we see here:
+
+```{r, eval=F}
+# Function to generate a random village
+gen_village <- function() {
+
+
+  # Select a village size
+  vil_size <- sample(l$params$min_vil_size:l$params$max_vil_size, size = 1)
+
+
+  # Select if village will be treated or not
+  treatment <- sample(0:1,
+                      size = 1,
+                      prob = c(1 - l$params$prob_vil_is_treated,
+                               l$params$prob_vil_is_treated)
+  )
+
+
+  # Create a village data set
+  tmp_vil <- data.table(
+
+    # Village ID
+    "village" = village,
+
+    # Within-village Household ID
+    "household" = 1:vil_size,
+
+    # Create baseline score
+    "baseline" = rnorm(vil_size,
+
+                       # Mean depends on the village
+                       mean = runif(1,
+                                    min = l$params$bl_min_mean_val,
+                                    max = l$params$bl_max_mean_val),
+
+                       # SD depends on village
+                       sd = runif(1,
+                                  min = l$params$bl_min_sd_val,
+                                  max = l$params$bl_max_sd_val)),
+
+
+    # Treatment status - village-wide effect
+    "treatead" = treatment %>% rep(vil_size))
+
+
+  # Concatenate village data set with all previous villages
+  return(tmp_vil)
+}
+
+```
+
+This function starts by randomly selecting the village size (from a unifom ditribution) that is between the minimum and maximum village size (`min_vil_size`, `max_vil_size` respectively). It then assigns with probability `prob_vil_is_treated` whether the village will be treated or not. With this information it genrates a database that includes, the village ID, the household ID (which is village-specific), a baseline value for each household, and a dummy variable indicating if the village was treated.
+
+The baseline value is not associated to any particular characteristic. Likewise, the treatment is also completely abstract, this is becuase the original question makes no mention as to what type of outcome or treatment the program was, only that it was implemented at the village level.
+
+The baseline value for each household comes form a normal distribution. The mean and standard deviation of this distribution are chozen at random. The choise of mean and SD comes from a uniform distribution with minimum and maximum values set by their own hyper-parameters. Importantly every village has a different mean and SD, but all households in the same village are sampled from the same distribution. This is what makes villages 'different' while households within each village are 'similar'. Importantly, the default size of the SD, the possible values of the mean, and their relation to the effect size has been calibrated to make sure this condition holds; the mean has a very large range of possible values of $[2, 100]$, SD has a comparetivley small range of smaller vlaues: $[0.5, 1.5]$ and effect size ranges from $0.1$ to $0.3$.
+
+After iterating over as many villages as the minimun nuber of villages specified and generating the data set the loop continues to check if there are sufficient villages in each treatment group to continue execution:
+
+```{r, eval=F}
+    ...
+    ## Contingency in case treatment or control groups are too small
+
+    # Size of the smallest treatment group
+    smallest_group <-
+      vil_hh_u[, .(nu_vils = uniqueN(.SD, by = "village")), by = treatead
+      ][, min(nu_vils)]
+
+
+    # Guarantee that there are enough villages in both treatment groups
+    while (smallest_group < l$params$max_vil_sampled) {
+
+      vil_hh_u <- rbind(vil_hh_u, gen_village())
+
+      # Size of the smallest treatment group
+      smallest_group <-
+        vil_hh_u[, .(nu_vils = uniqueN(.SD, by = "village")), by = treatead
+        ][, min(nu_vils)]
+    }
+    ...
+```
+
+If there anen't, it will continue to generate villages using `gen_village()` and adding them to the universe of villages `vil_hh_u` until there are enough villages in each treatment group as the maximum number of villages sampled `max_vil_sampled`. This gurantees that there are as many villages per treatment group as rows in the `m_pvals` matrix, but is only a contingency where the ratio of minimum number of villages in the universe to the maximum number of villages per treatment group is close to 1 (i.e. $min\_vils\_in\_universe / max\_vil\_sampled \approx 1$).
+
+
+
+
+
+
+
+
 

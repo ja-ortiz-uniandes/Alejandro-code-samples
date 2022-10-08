@@ -184,9 +184,6 @@ gen_village <- function() {
 
 ## Parallelization
 
-# plan for future processes
-plan(multisession)
-
 
 # Parallelization function
 change_hh_size <-
@@ -258,6 +255,10 @@ change_hh_size <-
     # treatment group
     return(pval_results)
   }
+
+
+# plan for future processes
+plan(multisession)
 
 
 # Loop over effect size
