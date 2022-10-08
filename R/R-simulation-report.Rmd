@@ -1,6 +1,9 @@
 ---
 title: "R code sample - Simulation"
-author: "Alejandro Ortiz - ja.ortiz@uniandes.edu.co"
+subtitle: "This report is part of [my portafolio]( https://github.com/ja-ortiz-uniandes/Alejandro-code-samples). Please refer to it for the full list of files or to report any issues."
+author: 
+  name: "Alejandro Ortiz"
+  email: "ja.ortiz@uniandes.edu.co"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output:
   html_document:
@@ -64,7 +67,7 @@ pre { /* Code block - determines code spacing between lines */
 # Clean - R's environment
 # .rs.restartR()
 cat("\f")
-# dev.off()
+graphics.off()
 remove(list = ls())
 gc(full = T)
 
@@ -337,7 +340,7 @@ After looking at the results we now turn our attention to the process through wh
 The script starts off with some metadata. This is the scripts title, the author and a brief description of what this script does. In this case the script also includes a warning to look at this report before looking at the script itself.
 
 ```{r}
-# Code sample R
+# Code sample R - Simulation
 
 # By: Alejandro Ortiz - ja.ortiz@uniandes.edu.co
 
@@ -358,7 +361,7 @@ Next comes the `Set up` section. The section begins with a series of commands to
 # Clean - R's environment
 # .rs.restartR()
 cat("\f")
-# dev.off()
+graphics.off()
 remove(list = ls()); gc(full = T)
 
 
@@ -531,7 +534,7 @@ After this, a nested loop starts, this loop will iterate the simulation experime
 ```{r, eval=F}
   ...
   # Simulate results many times
-  for (iter in 1:l$params$nu_simulations) {
+  for (iter in seq_len(l$params$nu_simulations)) {
 
     # Set a fixed seed for reproducibility
     set.seed(1944 + iter) # Year of Bretton woods
@@ -542,7 +545,7 @@ After this, a nested loop starts, this loop will iterate the simulation experime
 
 
     # Creating the universe - loop over villages
-    for (village in 1:l$params$min_vils_in_universe) {
+    for (village in seq_len(l$params$min_vils_in_universe)) {
 
       vil_hh_u <- rbind(vil_hh_u, gen_village())
 
@@ -669,7 +672,7 @@ For treated units there is a homogeneous effect distributed $N(\mu = \tau, \sigm
 
     # Runs for different village sample sizes the effect of varying
     # Household sample size
-    p_result <- future_map(1:l$params$max_vils_sampled,
+    p_result <- future_map(seq_len(l$params$max_vils_sampled),
                            .f = change_hh_size,
                            universe = vil_hh_u,
                            .progress = T,
@@ -710,7 +713,7 @@ change_hh_size <-
 
 
     # Loop over HHs sampled in each village
-    for (nu_hh in 1:max_nu_hh_per_vil) {
+    for (nu_hh in seq_len(max_nu_hh_per_vil)) {
       ...
 ```
 
@@ -888,7 +891,7 @@ Once all iterations of the effect size loop are finished `future`'s plan is set 
 
 
   # Bulk rename
-  names(avg_pvals) <- paste("HH_per_vil", 1:l$params$max_hh_sample_per_vil,
+  names(avg_pvals) <- paste("HH_per_vil", seq_len(l$params$max_hh_sample_per_vil),
                              sep = ".")
 
 

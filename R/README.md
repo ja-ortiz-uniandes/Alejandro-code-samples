@@ -8,7 +8,7 @@
 
 In this directory you will find a fully replicable and portable project in R that uses simulation techniques to answer this question. I decided to do this project as I believe is a good demonstration of my skills in `R`. It covers function writing, data management, visualization, parallelization, memory usage, error handling, local vs. global variables, planning for edge cases, use of many different data types from vectors to data.tables through matrices and lists; and brings it all together using a real-world question about sampling techniques. It demonstrates the use of many different and popular packages like `tidyverse`, `data.table`, `furrr`, and `plotly`. Lastly, this report itself shows the use of Rmarkdown with HTML, CSS, and YAML elements mixed in.
 
-However, it's worth saying that this is only a sample of my abilities in R. If there is any particular demonstration you would like to see please feel free contact me.
+However, it's worth saying that this is only a sample of my abilities in R. **If there is any particular demonstration you would like to see, please feel free contact me**.
 
 ## Contact
 
@@ -16,7 +16,7 @@ Please don't hesitate to write me an email if you find any issues, problems, or 
 
 ## Known issues
 
-None at the time of writing. If you know of any please create an issue, or email me directly.
+None at the time of writing. If you know of any please create an issue or email me directly.
 
 ## License
 

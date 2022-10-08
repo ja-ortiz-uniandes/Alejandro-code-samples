@@ -1,5 +1,5 @@
 
-# Code sample R
+# Code sample R - Simulation
 
 # By: Alejandro Ortiz - ja.ortiz@uniandes.edu.co
 
@@ -19,7 +19,7 @@
 # Clean - R's environment
 # .rs.restartR()
 cat("\f")
-# dev.off()
+graphics.off()
 remove(list = ls())
 gc(full = T)
 
@@ -158,7 +158,7 @@ gen_village <- function() {
     "village" = village,
 
     # Within-village Household ID
-    "household" = 1:vil_size,
+    "household" = seq_len(vil_size),
 
     # Create baseline score
     "baseline" = rnorm(vil_size,
@@ -215,7 +215,7 @@ change_hh_size <-
 
 
     # Loop over HHs sampled in each village
-    for (nu_hh in 1:max_nu_hh_per_vil) {
+    for (nu_hh in seq_len(max_nu_hh_per_vil)) {
 
       # Sample of treated villages
       v_sample <- universe[treated == 1, unique(.SD), .SDcols = "village"][sample(.N, size = nu_of_villages)]
@@ -309,7 +309,7 @@ for (
 
 
   # Simulate results many times
-  for (iter in 1:l$params$nu_simulations) {
+  for (iter in seq_len(l$params$nu_simulations)) {
 
     # Set a fixed seed for reproducibility
     set.seed(1944 + iter) # Year of Bretton woods
@@ -320,7 +320,7 @@ for (
 
 
     # Creating the universe - loop over villages
-    for (village in 1:l$params$min_vils_in_universe) {
+    for (village in seq_len(l$params$min_vils_in_universe)) {
       vil_hh_u <- rbind(vil_hh_u, gen_village())
     }
 
@@ -356,7 +356,7 @@ for (
 
     # Runs for different village sample sizes the effect of varying
     # household sample size
-    p_result <- future_map(1:l$params$max_vils_sampled,
+    p_result <- future_map(seq_len(l$params$max_vils_sampled),
       .f = change_hh_size,
       universe = vil_hh_u,
       .progress = T,
@@ -435,7 +435,7 @@ for (
 
 
   # Bulk rename
-  names(avg_pvals) <- paste("HH_per_vil", 1:l$params$max_hh_sample_per_vil,
+  names(avg_pvals) <- paste("HH_per_vil", seq_len(l$params$max_hh_sample_per_vil),
     sep = "."
   )
 
