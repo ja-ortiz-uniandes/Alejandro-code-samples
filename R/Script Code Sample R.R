@@ -7,7 +7,7 @@
 # IMPORATANT
 # Please look at the HTML report before looking at this script
 
-# This project uses renv so it is completely portable and reproducible
+# This project uses renv to so it is portable and reproducible
 
 
 # This is the an exercise that models a question from DIME.
@@ -128,14 +128,6 @@ l$opts$selct_params_in_file <- list("eff" = quote(eff_size))
 
 # plan for future processes
 plan(multiprocess)
-
-# Detect number of physical cores in host machine
-ncores <- detectCores(logical = F)
-
-# Create clusters
-clusters <- makeCluster(ncores)
-# if you plan to run this code you might want to use ncores - 1, to allow for
-# OS and other overhead
 
 
 # Parallelization function
@@ -385,12 +377,12 @@ future_map(1:l$params$max_vil_sampled,
 }
 
 
-# Close parallelization cluster
-stopCluster(clusters)
+# End parallelization
+plan(sequential)
 
 
 # Clean up after loop
-rm()
+remove(list = ls())
 
 
 
