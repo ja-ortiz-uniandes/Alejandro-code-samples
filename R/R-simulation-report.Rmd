@@ -1,0 +1,1143 @@
+---
+title: "R code sample - Simulation"
+author: "Alejandro Ortiz - ja.ortiz@uniandes.edu.co"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    highlight: cobalt.theme
+    toc: true # Table of contents
+    toc_float: true # Table of contents follows reader
+    theme:
+      version: 4
+      code_font:
+        google: Fira Code
+
+
+abstract: |
+  Thank you for looking at the report for my simulation code sample in `R`! This is a report for a project I thought of while doing a questionnaire for the World Bank's Development Impact Evaluation (DIME). The question was along the lines of: "*There is a program that is implemented at the village level. Households within the same village are very similar but households between villages are not. To maximize the likelihood of detecting the programs effect is it better to sample more households within each village or to sample more villages?*"
+ 
+  In this report I will answer this question through the use of simulation techniques in which programs with different effect sizes are implemented on a sample of randomly selected villages. I will also go over some of the theory and intuition for the answer and take this opportunity to talk about some sampling techniques, mainly on the differences between clustered sampling vs. stratified sampling vs. systematic sampling. However, the main objective of this report is to demonstrate my skills in `R` as such this document will mainly focus on the *code* itself.
+---
+
+
+```{=html}
+<style type = "text/css">
+
+body{ /* Normal  */
+      font-size: 16px;
+      text-align: justify
+  }
+td {  /* Table  */
+  <!-- font-size: 8px; -->
+}
+h1.title {
+  font-size: 40px;
+  <!-- color: DarkRed; -->
+}
+h1 { /* Header 1 */
+  font-size: 30px;
+  <!-- color: DarkBlue; -->
+}
+h2 { /* Header 2 */
+    font-size: 24px;
+    <!-- color: DarkBlue; -->
+}
+h3 { /* Header 3 */
+  font-size: 20px;
+  font-family: "Times New Roman", Times, serif;
+  <!-- color: DarkBlue; -->
+}
+code.r{ /* Code block */
+    font-size: 14px;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 16px;
+}
+</style>
+```
+
+```{r setup, include = FALSE}
+
+# Set up                                                                    ----
+
+
+# Clean - R's environment
+# .rs.restartR()
+cat("\f")
+# dev.off()
+remove(list = ls())
+gc(full = T)
+
+
+# Publish working directory
+getwd()
+
+
+# Set options
+# options(java.parameters = "-Xmx8000m")
+options(max.print = 200)
+
+
+# Update and load packages
+# update.packages(ask = F)
+
+# Plot results
+library(plotly)
+
+# Parallelization
+library(furrr)
+
+# Estimation
+library(fixest)
+
+# Core
+library(tidyverse)
+library(data.table)
+```
+
+# A few words on what makes good code
+
+for any given problem there are many different solutions and paths. While some paths may be more efficient or shorter than others. There are two necessary conditions for good code. Good code must be:
+
+1.  Functional
+2.  Easy to understand
+
+One cannot come at the expense of the other. These principles are behind every decision and form the backbone of every good script, regardless of the language. I am confident you will see this reflected in my work.
+
+## Styling
+
+One of the most important ways to create good code is to follow good coding practices from the beginning. Going back to fix things will always be costlier than starting out the right way. 
+
+Everything in this report is my own work with all relevant citations included. However, you will find that plural first-person active voice is often used throughout. This is a deliberate choice. In these cases, "we" refers to me (the author of the report) and you (the reader). This naturally results in a less formal tone that is meant yo be more engaging. This is not a formal writing sample. The main purpose of this document is to showcase my programming abilities and experience in `R`. If you wish to see a formal or an academic writing sample, please [write me an email](mailto:ja.ortiz@uniandes.edu.co).
+
+## Reproducibility & Portability
+
+Making sure your code is reproducible and portable is also essential for good code. This makes code available to a wider base of people, increases transparency, and bolsters confidence in the method and in the results.
+I always create a new R-project for each assignment, maintain `R` environments through `renv` and detailed records of every change through version control (as you can probably tell by reading this document on GitHub). In fact, this project not only has `renv` to increase its reproducibility and portability it also contains a `mamba` directory with the `.Rprofile` and `config.yml` files needed to guarantee that no matter when or in what system, the process and results can be replicated. This means that **this project is 100% reproducible and portable**. Just remember not to use `mamba` and `renv` simultaneously as they can conflict with each other.
+
+## Feedback
+
+Feedback is incredibly valuable. If you have any ideas, comments, criticisms, questions, advice, or if you find a mistakes or are having trouble replicating the results **please let me know**. After reading this report, I would highly appreciate it if you could complete [my survey](google.com) on the general perceptions of my dossier. Likewise, if you have any specific inquiries feel free to contact me though my email [ja.ortiz\@uniandes.edu.co](mailto:ja.ortiz@uniandes.edu.co){.email}.
+
+# Problem statement
+
+This is a question I came across while completing a questionnaire for the World Bank's Development and Impact Evaluation ([DIME](https://www.worldbank.org/en/research/dime)). While not a verbatim quote, the question was:
+
+> There is a program that is implemented at the village level. Households within the same village are very similar but households between villages are not. To maximize the likelihood of detecting the programs effect is it better to sample more households within each village or to sample more villages?
+
+Intuitively one may think that it’s better to sample more villages. If households within each village are similar then, the information that an additional household from a village that has already been sampled contributes to the regression, is less than the information contributed from a household from village that is unsampled and which there for, is different to all the other households in the sample.
+In reality, sampling an additional village is likely to be much more costly than sampling additional households in villages already in the sample. To sample a new village, one would need to plan a new route and account for travel time not to mention that it might require the crossing of intranational borders or geographic features which could further complicate the operation. In some contexts, it might be possible that different villages speak different languages which would require hiring additional translators / enumerators. This is particularly true if we belie, as the question states, that villages are very different from each other. This exercise recognizes these difficulties but is abstracted from these practicalities. 
+
+
+# Visualizing different sampling strategies
+
+```{r plotlyresults, echo = FALSE}
+
+
+# Plot list template
+pval_plots <- list()
+
+
+# Generate plots by looping over effect size
+for (file in list.files("Outputs/HH - Village surface/",
+                        pattern = "Homogeneous effects",
+                        full.names = T)) {
+
+
+  # Import data
+  avg_pvals <- fread(file, drop = "nu_villages", yaml = T)
+  # nu_villages is not imported because it's not needed
+
+
+  # Get hyper parameters form the data
+  local.max_hh_sample_per_vil <- NCOL(avg_pvals)
+  local.max_vils_sampled <- NROW(avg_pvals)
+
+
+
+  # Add an empty row and column
+  avg_pvals <- rbind(NA, avg_pvals, fill = T)
+  # this is done because the plotting function starts at 0 by default not 1
+  # The first value is estimated using 1 hh in 1 village.
+
+  # List of x values
+  xvals <-
+    rep(
+      0:local.max_vils_sampled,
+      each = (local.max_hh_sample_per_vil + 1)
+    ) %>%
+    matrix(ncol = local.max_hh_sample_per_vil + 1, byrow = T)
+
+
+  # List of y values
+  yvals <-
+    rep(
+      0:local.max_hh_sample_per_vil,
+      (local.max_vils_sampled + 1)
+    ) %>%
+    matrix(ncol = local.max_hh_sample_per_vil + 1, byrow = T)
+
+
+  # # Matrix of significance
+
+  # Template
+  sig_star <- matrix(
+    rep("", local.max_hh_sample_per_vil * local.max_vils_sampled),
+    ncol = local.max_hh_sample_per_vil)
+
+
+  # Include significance
+  sig_star[as.matrix(avg_pvals) < 0.10] <- "*"
+  sig_star[as.matrix(avg_pvals) < 0.05] <- "**"
+  sig_star[as.matrix(avg_pvals) < 0.01] <- "***"
+
+
+  # Extract effect size from title
+  local.eff_size <-
+    gsub(pattern = ".*eff_(\\d*\\.\\d*).*",
+         replacement = "\\1",
+         x = file,
+         perl = T)
+
+
+  # Actual plot
+  pval_plots[[paste0("eff_", local.eff_size)]] <-
+    plot_ly(z = as.matrix(avg_pvals)) %>%
+
+    # Surface plot
+    add_surface(
+
+      # Custom information on hover
+      hovertext = paste(
+
+        paste0(
+          "Nu. of Villages: ", xvals
+        ),
+
+        paste0(
+          "<br>H.H. per Village: ", yvals
+        ),
+
+        paste0(
+          "<br>p-value: ", paste0(
+            round(avg_pvals %>% as.matrix, 3),
+            sig_star
+          )
+        ),
+
+        paste0(
+          "<br>Sample size: ", xvals * yvals * 2
+        ),
+
+        sep = " ") %>%
+        matrix(ncol = local.max_hh_sample_per_vil + 1) %>% t,
+      # plotly assigns values in a different order in hovertext than in a surface
+      # trace. To account for this the matrix must be transposed.
+
+      hovertemplate = "%{hovertext}<extra></extra>",
+
+      showscale = F
+
+    ) %>%
+
+    # Layout options
+    layout(
+      hoverlabel = list(namelength = 10L),
+
+      # Add margins to the title
+      margin = list(
+        l = 50,
+        r = 50,
+        b = 50,
+        t = 50,
+        pad = 20
+      ),
+
+      # Graph title
+      title = list(
+        text = paste0("P-value for different sample size distributions",
+                      " - effect size: ", local.eff_size)
+      ),
+
+      scene = list(
+
+        # x-axis options
+        xaxis = list(
+          title = list(
+            text = "Households per village",
+            font = list(
+              size = 12
+            )
+          )
+        ),
+
+        # y-axis options
+        yaxis = list(
+          title = list(
+            text = "Villages per treatment group",
+            font = list(
+              size = 12
+            )
+          )
+        ),
+
+        # z-axis options
+        zaxis = list(title = "P-value"),
+
+        # Camera options
+        camera = list(
+          center = list(
+            x = 0,
+            y = 0,
+            z = -0.3
+          ),
+
+          eye = list(
+            x = 1.4,
+            y = 1.4,
+            z = 1
+          )
+        )
+      )
+    )
+}
+```
+
+As mentioned above, intuitively one might expect that sampling households from different villages would increase the statistical significance of the estimator. Let’s take a look at the first graph. It's worth saying that all these graphs are interactive so you may pan, rotate, zoom, etc. as well as hover over the plot to see the number of villages per each treatment group (i.e. treated and control), total sample size and the p-vale with '\*' at each of the usual significance thresholds (10%, 5%, 1%).
+
+```{r plotly-graph-0.1, echo = F}
+
+pval_plots$eff_0.1
+```
+
+From this graph it’s not immediately obvious that either sampling strategy is better than the other. In fact, it seems as if the surface descends at the same rate regardless if you are increasing the number of households per village or if you are increasing the number of villages per treatment group. Additionally, the surface of this graph is very rough, there are many local maxima and local minima scattered throughout. This is of course expected as a result from idiosyncratic errors and sample variance. However, it is also somewhat surprising, as this graph shows the average p-value over 1000x runs.
+
+Let's now see how this graph changes as we increase the effect size. Once again, I encourage you to explore each graph.
+
+```{r other-plotly-graphs, echo = F}
+
+pval_plots$eff_0.15
+pval_plots$eff_0.2
+pval_plots$eff_0.25
+pval_plots$eff_0.3
+```
+
+From the graphs above, it is easier to see that a pattern starts to emerge. Perhaps the most noticeable thing is how quickly the effects become significant (thus far we haven't looked at the estimators. For now, just know that in this context they are consistent and unbiased). The second most noticeable thing is how much smoother the surface is. In part this is due to the zero lower bound on p-values and in part it’s the result of the surface 'stretching' as p-values decrease faster the larger the effect is.
+
+Thirdly, and perhaps most importantly, by playing around with the graphs one might find that increasing the number of villages per treatment group is more effective at reducing the p-value than increasing the number of households per village.
+
+By hoovering your mouse over the graphs you'll see that for any given sample size, the p-value is lower in cases where there are more villages per group than households per village. That is to say that if you looked at the surface from above so that you only saw the x (Households per village) and y (Villages per treatment group) axis, and drew a 45° line on $y = x$, the values above the line (i.e. more villages than households) will in average be lower than values below the line (i.e. more households than villages). In other words, the surface is slanted so that increasing the number of villages will lower the p-value more than increasing the number of households. The clearest sign of this can be seen on the sloped border on the right side of the initial view (i.e. $Households\ per \ village = 1$). The surface limit reduces as the number of villages increases whereas on the opposite border,(i.e. $Villages\ per\ treatment\ group = 1$) the surface value remains at the same level regardless if the number of households sampled per village is 50 or 2.
+
+# Getting the results
+
+After looking at the results we now turn our attention to the process through which they were obtained. This is the part where we take an in-depth look at the code.
+
+## Script groundwork
+
+The script starts off with some metadata. This is the scripts title, the author and a brief description of what this script does. In this case the script also includes a warning to look at this report before looking at the script itself.
+
+```{r}
+# Code sample R
+
+# By: Alejandro Ortiz - ja.ortiz@uniandes.edu.co
+
+# This is an exercise that models a question from DIME.
+
+
+# IMPORTANT !!
+# Please look at the HTML report before looking at this script
+
+```
+
+Next comes the `Set up` section. The section begins with a series of commands to clean `R`'s environment by clearing the console, the plotting device, as well as any environment variables or objects and preforming some memory clean up. Here, the working directory is also printed to console (in the past this has spared me form a *lot* of confusion when opening a script and not realizing the project in which it its opened). There is also a setting to change the maximum console output to 200 (down from the default of 1000) as I find 200 is more than enough for any type of work. Limiting this setting is important because it helps to keep track of executions, maintain order in the console, and helps to better understand console outputs. Finally, the relevant packages are loaded they are grouped according to their function. The most important packages are **always** placed last to prevent masking by other packages. As you can see the most important packages are `tidyverse` and `data.table` , two amazing pieces of software that make `R` an incredibly powerful and versatile tool.
+
+```{r set-up, results='hide'}
+# Set up                                                                    ----
+
+
+# Clean - R's environment
+# .rs.restartR()
+cat("\f")
+# dev.off()
+remove(list = ls()); gc(full = T)
+
+
+# Publish working directory
+getwd()
+
+
+# Set options
+# options(java.parameters = "-Xmx8000m")
+options(max.print = 200)
+
+
+# Update and load packages
+# update.packages(ask = F)
+
+# Plot results
+library(plotly)
+
+# Parallelization
+library(furrr)
+
+# Estimation
+library(fixest)
+
+# Core
+library(tidyverse)
+library(data.table)
+```
+
+The `options(java.parameters = "-Xmx8000m")` is useful when working with rJava, even though it is not used here, I keep it in the set up section as a reminder that Java can run into memory problems if this setting is not enabled. This way, this option can be easily enabled if in the future if any Java is used.
+
+
+## Hyper-parameters
+
+The question is quite broad, and hence it's abstracted from a lot of the details needed for the simulation. These details are all compiled in the next section titled `Hyper-parameter dashboard`. In here it's possible to easily change all of these hyper-parameters such as the minimum and the maximum number of households per village. This section also includes some options used for exporting the results. However, looking at these parameters without knowing what context they are used in isn't very useful. So I won't go into much detail here, instead I'll simply say that all these user-defined values are stored in a list of two elements. The first one is the hyper-parameters, i.e. things that directly influence the outcome of the simulation. The second is the options, i.e. things that affect how the results are presented but leave the actual values the same.
+
+```{r, attr.source='style="max-height: 300px;"'}
+# Hyper-parameter dashboard                                                 ----
+
+
+# Hyper-parameters list template
+l <- list()
+
+
+# Maximum number of households sampled per village
+l$params$max_hh_sample_per_vil <- 50
+
+
+# Maximum number of villages sampled per treatment group
+l$params$max_vils_sampled <- 50
+
+
+# Minimum effect size
+l$params$min_effect_size <- 0.1
+
+
+# Maximum effect size
+l$params$max_effect_size <- 0.3
+
+
+# Effect size step
+l$params$effect_size_step <- 0.05
+
+
+# Number of times to run simulation over the same sample parameters
+l$params$nu_simulations <- 10^4
+
+
+# Minimum number of villages in the population
+l$params$min_vils_in_universe <- 200
+
+
+# Minimum number of HH per village in population
+l$params$min_vil_size <- 50
+
+
+# Maximum number of HH per village in population
+l$params$max_vil_size <- 200
+
+
+# Independent probability of a village being treated
+l$params$prob_vil_is_treated <- 0.5
+
+
+# Minimum value of the mean of baseline score
+l$params$bl_min_mean_val <- 2
+
+
+# Maximum value of the mean of baseline score
+l$params$bl_max_mean_val <- 100
+
+
+# Minimum value of the SD of baseline score
+l$params$bl_min_sd_val <- 0.5
+
+
+# Maximum value of the SD of baseline score
+l$params$bl_max_sd_val <- 1.5
+
+
+# # Not Simulation parameters but options
+# Save full list of hyper-parameters in file name?
+l$opts$full_params_in_file <- F
+
+
+# Select parameters to include in file name in case
+l$opts$select_params_in_file <- list("eff" = quote(eff_size))
+
+
+```
+
+Hyper parameters are placed on a list so they are 1) easy to access while 2) only taking up 1 slot in the global environment.
+
+In the future, warning and error handling will be applied to make sure that all values are consistent with each other (to prevent things like the maximum value being lower than the minimum). For now, if you wish to edit these parameters make sure that the values are consistent with each other.
+
+## Simulations
+
+The third code section is titled `Simulations`, this is where the actual simulations take place. If you are executing this code in your own machine, **I highly recommend you change the hyper parameters before you attempt to run this section** as the default values can be quite onerous on your system. It took me around one day to execute this part alone. This, in spite of the code being fully parallelized and achieving a consistent CPU utilization of over 99% on all cores.
+
+This section begins by defining the `gen_village()` and `change_hh_size()` functions, much like with the hyper parameters, looking at this functions without knowing what contexts they are used in isn't very informative so we will skip them for now with the promise to dive in deeper into their process once they are called.
+
+However, there are two other things at the beginning of this section worth remaking upon. The first one is the parallelization plan (in this case using `furrr`'s `multisession`). The second is the beginning of a loop through different effect sizes:
+
+```{r, eval=F}
+# plan for future processes
+plan(multisession)
+
+
+# Loop over effect size
+for (
+  eff_size in seq(
+
+    from = l$params$min_effect_size,
+    to = l$params$max_effect_size,
+    by = l$params$effect_size_step
+  )
+) { ...
+```
+
+As you can see, the loop will iterate over a list that starts at the minimum effect size `min_effect_size` through the maximum effect size `max_effect_size` in specified valued increments of `effect_size_step` (as a reminder, all objects prefixed by `l$params$` are user-defined hyper-parameters).
+
+The loop starts off by creating a template in which results will be stored. This is a matrix titled `m_pvals` (`m` for matrix and `pvals` since it will store p-values):
+
+```{r, eval=F}
+  ...
+
+  # Pre-allocate memory to results
+  m_pvals <- matrix(
+
+    nrow = l$params$max_vils_sampled,
+    # row number is equal to number of villager per treatment group
+
+    ncol = l$params$max_hh_sample_per_vil)
+    # column number is equal to number of HHs per village
+
+
+  # Matrix must not be NA or operations will only yield NA
+  m_pvals[is.na(m_pvals)] <- 0
+  
+  ...
+
+```
+
+As noted in the comments, the columns of the matrix represent the number of households sampled per village and rows represent the number of villages per treatment group. This is to say that the value $m\_pvals_{ij}$ represents the p-value for a sample of $i$ villages in both the treatment and control groups with $j$ households in each village where the total sample size is $i \times j \times 2$ (2 because there are two treatment groups).
+
+This matrix is then filled with 0's. This is done so that operations (like addition) don't result in `NA`’s.
+
+After this, a nested loop starts, this loop will iterate the simulation experiment `nu_simulations` times (default: 1000) and average the results at the end:
+
+```{r, eval=F}
+  ...
+  # Simulate results many times
+  for (iter in 1:l$params$nu_simulations) {
+
+    # Set a fixed seed for reproducibility
+    set.seed(1944 + iter) # Year of Bretton woods
+
+
+    # Template of village-household universe
+    vil_hh_u <- data.table()
+
+
+    # Creating the universe - loop over villages
+    for (village in 1:l$params$min_vils_in_universe) {
+
+      vil_hh_u <- rbind(vil_hh_u, gen_village())
+
+    }
+    ...
+
+```
+
+This loop will use quasi-random number generators. To guarantee reproducibility, a seed is set to an arbitrary value that changes with every iteration. In this case since the question came from DIME, it seemed fitting to set the seed's fixed component to the year of the [Bretton Woods conference](https://en.wikipedia.org/wiki/Bretton_Woods_Conference) that resulted in the [modern international economic system](https://en.wikipedia.org/wiki/Bretton_Woods_system).
+
+Then, there is another nested loop, this loop is in charge of generating the universe of all villages and households, so it runs `min_vils_in_universe` times  (default: 200), once for each village. On each iteration it concatenates the result of the new village with all the previous results.
+
+Each village is created using the `gen_village()` function we see here:
+
+```{r, eval=F}
+# Function to generate a random village
+gen_village <- function() {
+
+
+  # Select a village size
+  vil_size <- sample(l$params$min_vil_size:l$params$max_vil_size, size = 1)
+
+
+  # Select if village will be treated or not
+  treatment <- sample(0:1,
+                      size = 1,
+                      prob = c(1 - l$params$prob_vil_is_treated,
+                               l$params$prob_vil_is_treated)
+  )
+
+
+  # Create a village data set
+  tmp_vil <- data.table(
+
+    # Village ID
+    "village" = village,
+
+    # Within-village Household ID
+    "household" = 1:vil_size,
+
+    # Create baseline score
+    "baseline" = rnorm(vil_size,
+
+                       # Mean depends on the village
+                       mean = runif(1,
+                                    min = l$params$bl_min_mean_val,
+                                    max = l$params$bl_max_mean_val),
+
+                       # SD depends on village
+                       sd = runif(1,
+                                  min = l$params$bl_min_sd_val,
+                                  max = l$params$bl_max_sd_val)),
+
+
+    # Treatment status - village-wide effect
+    "treated" = treatment %>% rep(vil_size))
+
+
+  # Concatenate village data set with all previous villages
+  return(tmp_vil)
+}
+
+```
+
+This function starts by randomly selecting the village size (from a uniform distribution) that is between the minimum and maximum village size (`min_vil_size`, `max_vil_size` respectively with default values of 50 and 200). It then assigns with probability `prob_vil_is_treated` (default: 0.5) whether the village will be treated or not. With this information it generates a database that includes, the village ID, the household ID (which is village-specific), a baseline value for each household, and a dummy variable indicating if the village was treated.
+
+The baseline value is not associated to any particular characteristic. Likewise, the treatment is also completely abstract, this is because the original question makes no mention as to what type of outcome or treatment the program was for, only that it was implemented at the village level.
+
+The baseline value for each household comes from a normal distribution. The mean and standard deviation of this distribution are chosen at random. The choice of mean and SD comes from a uniform distribution with minimum and maximum values set by their own hyper-parameters. Importantly every village has a different mean and SD, but all households in the same village are sampled from the same distribution. This is what makes villages 'different' while households within each village are 'similar'. Importantly, the default size of the SD, the possible values of the mean, and their relation to the effect size has been calibrated to make sure this condition holds; the mean has a very large range of possible values of $[2, 100]$, SD has a comparatively small range of values: $[0.5, 1.5]$ and effect size ranges from 0.1 to 0.3.
+
+After iterating over as many times as the minimum number of villages specified, and generating the data set, the loop check’s if there are sufficient villages in each treatment group to continue execution:
+
+```{r, eval=F}
+    ...
+    # # Contingency in case treatment or control groups are too small
+
+    # Size of the smallest treatment group
+    smallest_group <-
+      vil_hh_u[, .(nu_vils = uniqueN(.SD, by = "village")), by = treated
+      ][, min(nu_vils)]
+
+
+    # Guarantee that there are enough villages in both treatment groups
+    while (smallest_group < l$params$max_vils_sampled) {
+
+      vil_hh_u <- rbind(vil_hh_u, gen_village())
+
+      # Size of the smallest treatment group
+      smallest_group <-
+        vil_hh_u[, .(nu_vils = uniqueN(.SD, by = "village")), by = treated
+        ][, min(nu_vils)]
+    }
+    ...
+```
+
+If there aren’t, it will continue to generate villages using `gen_village()` and adding them to the universe of villages `vil_hh_u` until there are as many villages in each treatment group as the maximum number of villages sampled `max_vils_sampled` (default: 50). This guarantees that there are as many villages per treatment group as rows in the `m_pvals` matrix, but is only a contingency for when the ratio of minimum number of villages in the universe to the maximum number of villages per treatment group is close to 1 (i.e. $min\_vils\_in\_universe / max\_vils\_sampled \approx 1$).
+
+
+#### **Why is this a function? Why doesn't it take any arguments?**
+
+This function serves three main purposes. First, it prevents code repetition; second, it guarantees that the underlying process for generating the data is the same no matter if it’s generated inside the initial `for` loop or the contingent `while` loop; third, by leveraging the previous two characteristics, it improves the readability of the code.
+
+Similarly, this function doesn’t take any arguments because it doesn’t need to. The function does rely heavily on environment parameters like `min_vil_size, prob_vil_is_treated, bl_min_mean_val, bl_min_sd_val` among others, but this functions is only designed to operate within the scope of this script and is not meant to be generally applicable to any R environment. So, while it is possible to add arguments for parameters like minim village size and the probability of a village being treated (amongst others), doing so would only make the code longer. Because in code, parsimony is a virtue I decided the additional complexity would not significantly contribute to the code’s main objectives of function and readability.
+
+Once the universe of households and villages is created, the outcome is generated for each household in each village. This is done by replicating the baseline value plus an additional random error term distributed $N(\mu = 0, \sigma^2 = 1)$.
+
+For treated units there is a homogeneous effect distributed $N(\mu = \tau, \sigma^2 = 1)$ where $\tau$ is the given effect size. As noted, this is a homogeneous effect, so all households in all villages are equally affected by the treatment. Additionally, the treatment effect has a standard deviation of 1, a value that doesn’t lead to any practical differences as the magnitude of the treatment is already changing. As always, please do [let me know](mailto:ja.ortiz@unaindes.edu.co) if you wish to see any additions to this simulation (like heterogenous treatment effects).
+
+
+```{r, eval=F}
+    ...
+
+    # Homogeneous effects of treatment
+    vil_hh_u[, outcome := baseline + rnorm(.N)]
+    vil_hh_u[treated == 1, outcome := baseline + rnorm(.N, mean = eff_size)]
+    # Treatment magnitude is the mean value
+
+
+    # New seed for stage-specific reproducibility
+    set.seed(2005 + iter) # Year DIME was created
+
+
+    # # Parallelize
+
+    # Runs for different village sample sizes the effect of varying
+    # Household sample size
+    p_result <- future_map(1:l$params$max_vils_sampled,
+                           .f = change_hh_size,
+                           universe = vil_hh_u,
+                           .progress = T,
+                           .options = furrr_options(seed = T))
+    ...
+
+```
+
+After the outcome value has been generated, a new seed is set. There is no need to do this as the first seed already guaranteed the reproducibility of this section. Nevertheless, it is placed here for practical purposes in case one only needs to replicate the estimation part of the simulation. Placing a new seed here means there is no need to re-run the entire village/household generation process in order to obtain the same results for estimation section.
+
+
+### The Parallelization function
+
+
+The estimation itself is done using `furrr`'s parallelization. for this the `future_map()` function is called. Importantly for this function the `seed = T` option is set which makes sure that parallelization is done while respecting the seed set above.
+
+For the parallelization the `change_hh_size()` function is called and parallelized through village sizes from 1 to the maximum village sample size set by `max_vils_sampled`. Here, the universe of villages & households `vil_hh_u` is passed on as the `universe` argument.
+
+The `change_hh_size()` function takes the number of villages to be sampled per treatment group `nu_of_villages` and a data set of the universe of villages and households `universe`. It then estimates the effect of varying the number of households sampled per village and returns a vector of the p-values of each estimation. Optionally one can also specify the maximum number of households sampled per village (default: `max_hh_sample_per_vil`), and whether or not to verbose messages and warnings from the estimation. The function then returns is a 1x`max_hh_sample_per_vil` (default: $1 \times 50$) vector of the p-values of each estimation.
+
+NOTE: This function can be exported to other environments if the `max_nu_hh_per_vil` value is specified and the structure of `universe` remains the same. Unlike with the `gen_village()` function, this is important so `future` can transport the function and its arguments into another `R` session for parallelization. However, this function is only designed to be called in this scope. The `universe` and `max_nu_hh_per_vil` arguments are included here to illustrate the use of optional and mandatory parameters alongside more general form of function writing.
+
+
+```{r, eval=F}
+
+change_hh_size <-
+  function(nu_of_villages, universe,
+           max_nu_hh_per_vil = l$params$max_hh_sample_per_vil,
+           return_messages = F, return_warnings = F
+  ) {
+
+    # Required packages for the function
+    require(data.table)
+    require(fixest)
+
+    # Pre-allocate space for results into memory
+    pval_results <- vector("numeric", length = max_nu_hh_per_vil)
+
+
+    # Loop over HHs sampled in each village
+    for (nu_hh in 1:max_nu_hh_per_vil) {
+      ...
+```
+
+When the function is initiated, the required packages are attached and a vector template for the results is created. Templates are important because they pre-allocate the memory space for results which speeds up execution as the computer only needs to re-write pre-existing values when saving results.
+
+After this, the loop over the number of households sampled per village is initiated. The loop begins by creating a list of randomly sampled treated and untreated villages. Before creating a temporary template vector of length 1, which is important so `future` can transport this object to other `R` sessions. 
+
+```{r, eval=F}
+
+    ...
+      # Sample of treated villages
+      v_sample <- universe[treated == 1, unique(.SD), .SDcols = "village"
+      ][sample(.N, size = nu_of_villages)]
+
+
+      # Sample of untreated villages
+      v_sample <- rbind(
+        v_sample,
+        universe[treated != 1, unique(.SD), .SDcols = "village"
+        ][sample(.N, size = nu_of_villages)])
+
+
+      # Temporary result template
+      tmp <- 0
+      # Used so furrr - can transport the object
+      ...
+```
+      
+Once the village sample is determined, estimation is preformed over these villages. Inside each village a random sample of households is drawn. The combination of the randomly drawn villages and randomly drawn households is what makes the sample for a simple OLS estimation. In this case the `feols()` function from the `fixest` package is used. This is an incredible package that is much more feature-rich and *much* faster that the `base::lm()` function. For the most part, neither of these advantages are needed in this particular case, however, I heavily favour using `feols()` over `lm()` even in cases where the result is similar.
+
+```{r, eval=F}
+
+      ...
+      # From a simple OLS - get the p-value for treated dummy
+      tryCatch(
+        expr = {
+          tmp <<-
+            feols(outcome ~ baseline + treated,
+                  data = universe[
+
+                    # Only villages in sample
+                    v_sample, on = "village"
+
+                    # Sample a of hh in each village
+                  ][, .SD[sample(.N, size = min(.N, nu_hh))],
+                    by = village]
+
+                  # Grab p-value for treated dummy
+            )[["coeftable"]][["Pr(>|t|)"]][3]
+        },
+
+        warning = function(war) {
+
+          # Return warning if necessary
+          if (return_warnings) {
+            war
+          }
+        },
+
+        message = function(mes) {
+
+          # Return message if necessary
+          if (return_messages) {
+            mes
+          }
+        }
+      )
+
+      # Save to result vector
+      pval_results[nu_hh] <- tmp
+
+    }
+
+    # Result is the vector of p-values - for that Nu. of villages in each
+    # Treatment group
+    return(pval_results)
+  }
+
+```
+
+You will also notice that the estimation is wrapped in the `tryCatch()` function. This is to include some basic form of error/warning handling in the function. Usually when sample sizes are small (i.e. when there are only a few households and only a few villages) `feols()` might give a warning or remove a variable because of collinearity, resulting in messages and warnings that can clutter the console. To avoid this, warnings and messages are caught but can be optionally returned using the `return_messages` and `return_warnings` arguments.
+
+Estimation results are then saved into the `pval_results` vector and the vector is returned once the loop over all household sample sizes is finished.
+
+## Saving the iteration results
+
+Results from `future_map()` are returned in list form (one could use other `map` variants). They are then unlisted and placed row-wise in a matrix (important for cases where the results matrix isn't square).
+
+If there are any NA values within the estimation results a warning is issued with the effect size and iteration where the NAs where detected. This is important because if there are a lot of NAs the calculated average of p-values could be incorrect. However, with the default set of hyper-parameters there are no NAs.
+
+In case there are any NAs, they are converted into 1s to avoid losing all the p-values from past and future iterations. After this, the matrix with the p-values from that specific iteration `tmp_mat` is added to all the other p-values from previous iterations contained in `m_pvals` matrix. The value of 1 is chosen to bias the results upwards in case there are any NAs.
+
+Once an iteration is done, a message stating the iteration, effect size and the time is printed to console.
+  
+```{r, eval=F}
+  ...
+    # Unlist results into a matrix
+    tmp_mat <- p_result %>% unlist %>%
+      matrix(ncol = l$params$max_hh_sample_per_vil, byrow = T)
+    # Columns represent number HHs sampled per village,
+    # Rows represent the number of villages per treatment group
+
+
+    # Warn if there are NAs, then replace NAs with 0
+    if (any(is.na(tmp_mat))) {
+      warning(
+        paste0("NAs detected for effect size: ", eff_size,
+               " Iteration: ", iter)
+      )
+    }
+    tmp_mat[is.na(tmp_mat)] <- 1
+
+
+    # Add results from previous iterations
+    m_pvals <- m_pvals + tmp_mat
+
+
+    # Verbalize iteration and time
+    cat(
+      paste0(
+        "Finished cycle: ", iter, " - for effect size: ", eff_size,
+        "\n", Sys.time(), "\n\n")
+    )
+
+    flush.console()
+
+}
+  ...
+
+```
+
+After all iterations are done, the average of all p-values is taken by dividing the sum p-values across all iterations by the number of iterations.
+
+The case where there are only two observations, one treated and one control, is removed. This is because there are not enough data points in the regressions, which results in incorrectly estimated p-values.
+
+Lastly, the results are saved to disk using the user specified options before moving onto the next iteration of the effect size loop.
+
+Once all iterations of the effect size loop are finished `future`'s plan is set back to the default and the environment is cleaned of all non-hyper parameters. 
+
+
+```{r, eval=F}
+  ...
+  # Calculate average p-value
+  avg_pvals <- m_pvals / l$params$nu_simulations
+
+
+  # Sample size of 2 is too small
+  avg_pvals[1, 1] <- NA
+
+
+  # Save full list of hyper parameters?
+  if (l$opts$full_params_in_file) {
+
+    file_details <-
+      paste(
+        paste0(names(l), "_", l),
+        collapse = " ")
+
+  } else {
+
+    file_details <-
+      paste(
+        paste0(names(l$opts$select_params_in_file),
+               "_",
+
+               # Evaluate expressions in current setting
+               lapply(l$opts$select_params_in_file, eval)),
+        collapse = " ")
+
+  }
+
+
+  # Transform to data.table
+  avg_pvals <- avg_pvals %>% as.data.table
+
+
+  # Bulk rename
+  names(avg_pvals) <- paste("HH_per_vil", 1:l$params$max_hh_sample_per_vil,
+                             sep = ".")
+
+
+  # Add variable indicating the number of villages
+  avg_pvals[, nu_villages := seq_len(.N)]
+
+
+  # Save result
+  fwrite(avg_pvals,
+         paste0("Outputs/HH - Village surface/",
+                "Homogeneous effects ",
+                file_details,
+                ".csv"),
+         yaml = T)
+
+}
+
+
+# End parallelization
+plan(sequential)
+
+
+# Clean up after loop
+remove(list = ls()[!ls() == "l"])
+```
+
+
+# Interactive plotly results
+
+
+Now that all the estimation results are done, we move on to the final section of the script. In keeping with what by now might be considered as tradition, the section begins by creating a template where all plots will be stored before initializing a loop. The first thing that this loop does is load the data without the number of villages column (as it’s not needed). 
+
+It's worth noting that this loop is designed to iterate only over different effect sizes.
+
+
+```{r, eval=F}
+
+# Plot list template
+pval_plots <- list()
+
+
+# Generate plots by looping over effect size
+for (file in list.files("Outputs/HH - Village surface/",
+                        pattern = "Homogeneous effects",
+                        full.names = T)) {
+
+
+  # Import data
+  avg_pvals <- fread(file, drop = "nu_villages", yaml = T)
+  # nu_villages is not imported because it's not needed
+  
+  ...
+```
+  
+Once the data is loaded, the `max_hh_sample_per_vil` and ` max_vils_sampled` hyper-parameters are extracted. This is done so this section can be independently executed without manual input from the user on what the number of villages and number of households are for each specific file. After this, an empty first row and column are added to the data, this is done because by default `plotly` begins plotting at 0. Given that it’s impossible to perform an estimation with a sample size of 0 an empty row and column is added to tell `plotly` that there are no results when either the number of villages per treatment group is 0 or the number of households per village is 0.
+
+Then, two matrices are created. The `xvals` matrix contains in each cell the number of villages per treatment group (i.e. values in the same row are constant). Similarly, the `yvals` matrix contains in each cell the number of households sampled per village (i.e. values in the same column are constant). Both of these objects will be useful in future.
+
+```{r, eval=F}
+  ...
+  # Get hyper parameters form the data
+  local.max_hh_sample_per_vil <- NCOL(avg_pvals)
+  local.max_vils_sampled <- NROW(avg_pvals)
+
+
+  # Add an empty row and column
+  avg_pvals <- rbind(NA, avg_pvals, fill = T)
+
+  
+  # List of x values
+  xvals <-
+    rep(
+      0:local.max_vils_sampled,
+      each = (local.max_hh_sample_per_vil + 1)
+    ) %>%
+    matrix(ncol = local.max_hh_sample_per_vil + 1, byrow = T)
+
+
+  # List of y values
+  yvals <-
+    rep(
+      0:local.max_hh_sample_per_vil,
+      (local.max_vils_sampled + 1)
+    ) %>%
+    matrix(ncol = local.max_hh_sample_per_vil + 1, byrow = T)
+
+  ...
+```
+
+Then, another matrix is generated. The `sig_star` matrix is a character matrix that contains '*' indicators for the usual, levels of significance of 10%, 5%, and 1%. Once this is done, the effect size is extracted from the files title.
+
+```{r, eval=F}
+  ...
+  # # Matrix of significance
+
+  # Template
+  sig_star <- matrix(
+    rep("", local.max_hh_sample_per_vil * local.max_vils_sampled),
+    ncol = local.max_hh_sample_per_vil)
+
+
+  # Include significance
+  sig_star[as.matrix(avg_pvals) < 0.10] <- "*"
+  sig_star[as.matrix(avg_pvals) < 0.05] <- "**"
+  sig_star[as.matrix(avg_pvals) < 0.01] <- "***"
+
+
+  # Extract effect size from title
+  local.eff_size <-
+    gsub(pattern = ".*eff_(\\d*\\.\\d*).*",
+         replacement = "\\1",
+         x = file,
+         perl = T)
+
+  ...
+```
+
+Now that all of the supporting matrices have been created, the loop proceeds to creating the actual plot. This is done with a 3D surface trace. Notably, a custom value for the `hovertext` argument is specified, this is a special matrix with some HTML formatting that will specify for each point the number of households, the number of villages, the p-value (with significance ‘*’) and the total sample size. Importantly, `plotly` assigns the `hovertext` values differently than with a surface trace. To remedy this, the matrix is transposed. 
+
+```{r, eval=F}
+  pval_plots[[paste0("eff_", local.eff_size)]] <-
+    plot_ly(z = as.matrix(avg_pvals)) %>%
+
+    # Surface plot
+    add_surface(
+
+      # Custom information on hover
+      hovertext = paste(
+
+        paste0(
+          "Nu. of Villages: ", xvals
+        ),
+
+        paste0(
+          "<br>H.H. per Village: ", yvals
+        ),
+
+        paste0(
+          "<br>p-value: ", paste0(
+            round(avg_pvals %>% as.matrix, 3),
+            sig_star
+          )
+        ),
+
+        paste0(
+          "<br>Sample size: ", xvals * yvals * 2
+        ),
+
+        sep = " ") %>%
+        matrix(ncol = local.max_hh_sample_per_vil + 1) %>% t,
+      # plotly assigns values in a different order in hovertext than in a surface
+      # trace. To account for this the matrix must be transposed.
+
+      hovertemplate = "%{hovertext}<extra></extra>",
+
+      showscale = F
+
+    ) %>%
+    ...
+```
+
+After generating the trace, some layout options are specified. These options have been specially tuned for this report. The first option limits the maximum length of the hover text dialogue. The second option adds a small margin to the plot's title, the text of which is specified in the third option.
+
+The next grouping of options simply name the x, y, and z axis, respectively. Lastly, the `camera` options specify the graph's default starting view. 
+
+```{r, eval=F}
+    ...
+    # Layout options
+    layout(
+      hoverlabel = list(namelength = 10L),
+
+      # Add margins to the title
+      margin = list(
+        l = 50,
+        r = 50,
+        b = 50,
+        t = 50,
+        pad = 20
+      ),
+
+      # Graph title
+      title = list(
+        text = paste0("P-value for different sample size distributions",
+                      " - effect size: ", local.eff_size)
+      ),
+
+      scene = list(
+
+        # x-axis options
+        xaxis = list(
+          title = list(
+            text = "Households per village",
+            font = list(
+              size = 12
+            )
+          )
+        ),
+
+        # y-axis options
+        yaxis = list(
+          title = list(
+            text = "Villages per treatment group",
+            font = list(
+              size = 12
+            )
+          )
+        ),
+
+        # z-axis options
+        zaxis = list(title = "P-value"),
+
+        # Camera options
+        camera = list(
+          center = list(
+            x = 0,
+            y = 0,
+            z = -0.3
+          ),
+
+          eye = list(
+            x = 1.4,
+            y = 1.4,
+            z = 1
+          )
+        )
+      )
+    )
+}
+
+
+# Clean up after loop
+remove(list = ls()[!ls() == "pval_plots"])
+```
+
+Once the plot has been generated and stored the loop simply continues onto the next iteration. After the loop is done clean-up is done on all environment objects except for the list of plots.
+
+
+# Closing remarks
+
+I hope you have found this report informative. I decided to do this project as I believe is a good demonstration of my skills in `R`. It covers function writing, data management, visualization, parallelization, memory usage, error handling, local vs. global variables, planning for edge cases, use of many different data types from vectors to data.tables through matrices and lists; and brings it all together using a real-world question about sampling techniques. It demonstrates the use of many different and popular packages like `tidyverse`, `data.table`, `furrr`, and `plotly`. Lastly, this report itself shows the use of Rmarkdown with HTML, CSS, and YAML elements mixed in.
+
+As mentioned before, whatever feedback you may have is greatly appreciated. You could complete [my survey](google.com) on the general perceptions of my dossier or, if you have any specific inquiries feel free to contact me though my email [ja.ortiz\@uniandes.edu.co](mailto:ja.ortiz@uniandes.edu.co){.email}.
+
+Any and all comments are appreciated, your feedback will be used to continually develop new projects and improve on the already existing ones.
+
+# References
+
+This report is entirely of my own creation. Thanks to shafee who created the cobalt theme template. This report uses a slightly modified version of this template for the code chunk style output.
+
+<!-- fin -->
+  
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>
