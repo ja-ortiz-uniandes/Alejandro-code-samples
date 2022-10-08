@@ -1,6 +1,6 @@
-# DIME-code-sample
+# Alejandro Ortiz code sample portfolio
 
-Thank you for visiting my repo for my code samples for DIME!
+Thank you for visiting my repo for my code samples !
 
 It is recommended to look at the Associated report, before looking at the the actual script or markdown file.
 
