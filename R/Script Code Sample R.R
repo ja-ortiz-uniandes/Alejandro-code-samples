@@ -4,18 +4,21 @@
 # By: Alejandro Ortiz - ja.ortiz@uniandes.edu.co
 
 
-# Make project Portable and reproducible
-renv::activate()
+# IMPORATANT
+# Please look at the HTML report before looking at this script
+
+# This project uses renv so it is completely portable and reproducible
 
 
+# This is the an exercise that models a question from DIME.
 
 # Set up                                                                    ----
 
 
-# Clean - R's enviornment
+# Clean - R's environment
 # .rs.restartR()
 cat("\f")
-# dev.off()
+dev.off()
 remove(list = ls())
 gc(full = T)
 
@@ -31,156 +34,562 @@ options(max.print = 200)
 
 # Update and load packages
 # update.packages(ask = F)
+library(plotly)
+library(parallel)
 library(fixest)
 library(tidyverse)
 library(data.table)
 
 
 
+# Hyper-parameter dashboard                                                 ----
+
+
+# Hyper-parameters list template
+l <- list()
+
+
+# Maximum number of households sampled per village
+l$params$max_hh_sample_per_vil <- 50
+
+
+# Maximum number of villages sampled
+l$params$max_vil_sampled <- 50
+
+
+# Minimum effect size
+l$params$min_effect_size <- 0.1
+
+
+# Maximum effect size
+l$params$max_effect_size <- 0.3
+
+
+# Effect size step
+l$params$effect_size_step <- 0.05
+
+
+# Number of times to run simulation over the same sample parameters
+l$params$nu_simulations <- 10^4
+
+
+# Maximum number of villages in the population
+l$params$vil_in_universe <- 200
+
+
+# Minimum number of HH per village in population
+l$params$min_vil_size <- 50
+
+
+# Maximum number of HH per village in population
+l$params$max_vil_size <- 200
+
+
+# Independent probability of a village being treated
+l$params$prob_vil_is_treated <- 0.5
+
+
+# Minimum value of the mean of baseline score
+l$params$bl_min_mean_val <- 2
+
+
+# Maximum value of the mean of baseline score
+l$params$bl_max_mean_val <- 100
+
+
+# Minimum value of the sd of baseline score
+l$params$bl_min_sd_val <- 0.5
+
+
+# Maximum value of the sd of baseline score
+l$params$bl_max_sd_val <- 1.5
+
+
+## Not Simulation parameters but options
+# Save full list of hyper-parameters in file name?
+l$opts$full_params_in_file <- F
+
+
+# Select parameters to include in file name in case
+# l$params$full_params_in_file == F
+l$opts$selct_params_in_file <- list("eff" = quote(eff_size))
+
+
+
+# Warnings and error handling coming in the future
+
+
+
+
 # Clustered vs. Stratified vs. Systematic Sampling                          ----
 
 
-# This is the an excercice that models a question from DIME.
+## Parallelization
 
+# plan for future processes
+plan(multiprocess)
 
-# Create population
-
-
-
-
-tot.m <- matrix(nrow = 50, ncol = 20)
-
-
-mat <- matrix(nrow = 50, ncol = 20)
-
-
+# Detect number of physical cores in host machine
 ncores <- detectCores(logical = F)
-cl <- makeCluster(ncores)
+
+# Create clusters
+clusters <- makeCluster(ncores)
+# if you plan to run this code you might want to use ncores - 1, to allow for
+# OS and other overhead
 
 
-for (i in 1:1000) {
+# Parallelization function
+change_hh_size <-
+  function(nu_of_villages, universe,
+           max_nu_hh_per_vil = l$params$max_hh_sample_per_vil) {
 
+    # This functions takes the number of villages to be sampled per treatment
+    # group (nu_of_villages) and a data set of the universe of villages and
+    # households (universe). Optionally one can also specify the maximum number
+    # of hh sampled per village. In this script this value is determined by  the
+    # max_hh_sample_per_vil parameter.
 
-  set.seed(1944 + i) # Year of Bretton woods
+    # The function then estimates the effect of varying the number of hh sampled
+    # per village and returns is a 1x50 (default) vector of the p-values of
+    # each estimation.
 
-  vil <- data.table()
-
-  for (v in 1:150) {
-
-
-    v.size <- sample(30:200, size = 1)
-
-    treatment <- sample(c(T, F), 1)
-
-    tmp_vil <- data.table("village" = v,
-
-                          "household" = 1:v.size,
-
-                          "baseline" = rnorm(v.size,
-                                             mean = runif(1, 0, 100),
-                                             sd = runif(1, 0.5, 3)),
-
-                          "treatead" = treatment %>% rep(v.size))
-
-
-    vil <- rbind(vil, tmp_vil)
-
-
-  }
-
-  print("fin crear muestra")
-  print(Sys.time())
-
-  # vil[, .("Nu. of villages" = uniqueN(.SD, by = "village")), by = .(treatead)]
-
-
-
-  # vil[, outcome := baseline]
-  # vil[treatead == 1, outcome := baseline + rnorm(.N, mean = 0.1)]
-
-  vil[, baseline := baseline + rnorm(.N, mean = 0.1)]
-
-
-  set.seed(2005 + i) # Year DIME was created
-
-
-
-  hh.size.village <- function(nu.vil, db) {
-
+    # Required packages for the function
     require(data.table)
     require(fixest)
 
-    tmp <- vector(length = 20)
+    # Pre-allocate space for results into memory
+    tmp <- vector(length = max_nu_hh_per_vil)
 
 
-    for (nu.hh in 1:20) {
+    # Loop over HHs sampled in each village
+    for (nu_hh in 1:max_nu_hh_per_vil) {
 
       # Sample of treated villages
-      v.sample <- db[treatead == 1, unique(.SD), .SDcols = "village"
-      ][sample(.N, size = nu.vil)]
+      v_sample <- universe[treatead == 1, unique(.SD), .SDcols = "village"
+      ][sample(.N, size = nu_of_villages)]
 
 
       # Sample of untreated villages
-      v.sample <- rbind(
-        v.sample,
-        db[treatead != 1, unique(.SD), .SDcols = "village"
-        ][sample(.N, size = nu.vil)])
+      v_sample <- rbind(
+        v_sample,
+        universe[treatead != 1, unique(.SD), .SDcols = "village"
+        ][sample(.N, size = nu_of_villages)])
 
 
+      # From a simple OLS - get the p-value for treated dummy
+      tmp[nu_hh] <-
 
+        # OLS
+        feols(outcome ~ baseline + treatead,
+              data = universe[
 
+                # Only villages in sample
+                v_sample, on = "village"
 
-      tmp[nu.hh] <-
-        feols(baseline ~ treatead,
-              data = db[v.sample, on = "village"
-              ][, .SD[sample(.N, size = min(.N, nu.hh))],
+                # Sample a of hh in each village
+              ][, .SD[sample(.N, size = min(.N, nu_hh))],
                 by = village]
-        )[["coeftable"]][["Pr(>|t|)"]][2]
 
-
+              # Grab p-value for treated dummy
+        )[["coeftable"]][["Pr(>|t|)"]][3]
 
     }
 
+
+    # Result is the vector of p-values - for that Nu. of villages in each
+    # treatment group
     return(tmp)
   }
 
 
-  p.result <- clusterApply(cl, x = 1:50,
-                           fun = hh.size.village, db = vil)
+# Loop over effect size
+for (eff_size in seq(
 
-  mat <- p.result %>% unlist %>% matrix(nrow = 50)
+  from = l$params$min_effect_size,
+  to = l$params$max_effect_size,
+  by = l$params$effect_size_step)
 
-  mat[is.na(mat)] <- 0
+) {
 
-  tot.m <- tot.m + mat
 
-  print(paste("fin ciclo", i))
-  print(Sys.time())
+  # Pre-allocate memory to results
+  m_pvals <- matrix(
+
+    nrow = l$params$max_vil_sampled,
+    # row number is equal to number of villager per treatment group
+
+    ncol = l$params$max_hh_sample_per_vil)
+    # column number is equal to number of HHs per village
+
+
+  # Matrix must not be NA or operations will only yield NA
+  m_pvals[is.na(m_pvals)] <- 0
+
+
+  # Simulate results many times
+  for (iter in 1:l$params$nu_simulations) {
+
+    # Set a fixed seed for reproducibility
+    set.seed(1944 + iter) # Year of Bretton woods
+
+
+    # Template of village-household universe
+    vil_hh_u <- data.table()
+
+
+    # Creating the universe - loop over villages
+    for (village in 1:l$params$vil_in_universe) {
+
+
+      # Select a village size
+      vil_size <- sample(l$params$min_vil_size:l$params$max_vil_size, size = 1)
+
+
+      # Select if village will be treated or not
+      treatment <- sample(0:1,
+                          size = 1,
+                          prob = c(1 - l$params$prob_vil_is_treated,
+                                   l$params$prob_vil_is_treated)
+                          )
+
+
+      # Create a village data set
+      tmp_vil <- data.table(
+
+        # Village ID
+        "village" = village,
+
+        # Within-village Household ID
+        "household" = 1:vil_size,
+
+        # Create baseline score
+        "baseline" = rnorm(vil_size,
+
+                           # Mean depends on the village
+                           mean = runif(1,
+                                        min = l$params$bl_min_mean_val,
+                                        max = l$params$bl_max_mean_val),
+
+                           # SD depends on village
+                           sd = runif(1,
+                                      min = l$params$bl_min_sd_val,
+                                      max = l$params$bl_max_sd_val)),
+
+
+        # Treatment status - village-wide effect
+        "treatead" = treatment %>% rep(vil_size))
+
+
+      # Concatenate village data set with all previous villages
+      vil_hh_u <- rbind(vil_hh_u, tmp_vil)
+    }
+
+
+    # # Number of villages in treated and control groups
+    # vil_hh_u[, .("Nu. of villages" = uniqueN(.SD, by = "village")), by = .(treatead)]
+    # # commented because adds little value inside the loop
+
+
+    # Homogeneous effects of treatment
+    vil_hh_u[, outcome := baseline + rnorm(.N)]
+    vil_hh_u[treatead == 1, outcome := baseline + rnorm(.N, mean = eff_size)]
+    # Treatment magnitude is the mean value
+
+
+    # New seed for stage-specific reproducibility
+    set.seed(2005 + iter) # Year DIME was created
+
+
+    ## Parallelize
+
+    # Runs for different village sample sizes the effect of varying
+    # household sample size
+    p_result <- clusterApply(clusters,
+                             x = 1:l$params$max_vil_sampled,
+                             fun = change_hh_size,
+                             universe = vil_hh_u)
+
+future_map(1:l$params$max_vil_sampled,
+           .f = change_hh_size,
+           universe = vil_hh_u,
+           .options = furrr_options(seed = T),
+           .progress = T)
+
+
+    # Unlist results into a matrix
+    tmp_mat <- p_result %>% unlist %>%
+      matrix(ncol = l$params$max_hh_sample_per_vil, byrow = T)
+    # columns represent number HHs sampled per village,
+    # rows represent the number of villages per treatment group
+
+
+    # Warn if there are NAs, then replace NA's with 0
+    if (any(is.na(tmp_mat))) {
+      warning(
+        paste0("NAs detected. effect size: ", eff_size,
+               " Iteration: ", iter)
+      )
+    }
+    tmp_mat[is.na(tmp_mat)] <- 0
+
+
+    # Add results from previous iterations
+    m_pvals <- m_pvals + tmp_mat
+
+
+    # Verbalize iteration and time
+    cat(
+      paste0(
+        "\n\nFinished cycle: ", iter, " - for effect size: ", eff_size,
+        "\n", Sys.time())
+      )
+
+    flush.console()
+
+
+  }
+
+
+  # Calculate average p-value
+  avg_pvals <- m_pvals / l$params$nu_simulations
+
+
+  # Save full list of hyper parameters?
+  if (l$opts$full_params_in_file) {
+
+    file_details <-
+      paste(
+        paste0(names(l), "_", l),
+        collapse = " ")
+
+  } else {
+
+    file_details <-
+      paste(
+        paste0(names(l$opts$selct_params_in_file),
+               "_",
+
+               # Evaluate expressions in current setting
+               lapply(l$opts$selct_params_in_file, eval)),
+        collapse = " ")
+
+  }
+
+
+  # Save result
+  fwrite(avg_pvals, paste0("Outputs/HH - Village surface/",
+                   "Homogeneous effects ",
+                   file_details,
+                   ".csv"), yaml = T)
 
 }
 
-k <- tot.m / 102
 
-k <- cbind(NA, k)
-k <- rbind(NA, k)
+# Close parallelization cluster
+stopCluster(clusters)
 
-library(plotly)
 
-# volcano is a numeric matrix that ships with R
+# Clean up after loop
+rm()
 
-fig <- plot_ly(z = ~k)
 
-fig <- fig %>% add_surface() %>%
-  layout(
-    scene = list(
-      xaxis = list(title = 'Nu. of households per village'),
-      yaxis = list(title = 'Nu. of villages per group'),
-      zaxis = list(title = 'P-value')
+
+# Interactive plotly results                                                ----
+
+
+# loop over effect size
+for (file in list.files("Outputs/HH - Village surface/",
+                        pattern = "Homogeneous effects",
+                        full.names = T)) {
+
+
+  # Import data
+  avg_pvals <- fread(paste0("Outputs/HH - Village surface/",
+                            "Homogeneous effects ",
+                            file_details,
+                            ".csv"), yaml = T)
+
+
+  # # Transform matrix into a long-format data.table
+  # # Add variable of number of villages per group
+  # avg_pvals[, nu_of_villages_per_group := .I]
+  #
+  #
+  # # Melt to long
+  # avg_pvals <- melt(avg_pvals,
+  #      id.vars = "nu_of_villages_per_group",
+  #      variable.name = "nu_hh_per_vil",
+  #      value.name = "p_val",
+  #      variable.factor = F)
+  #
+  #
+  # # Transform nu. hh per village into numeric
+  # avg_pvals[, nu_hh_per_vil := gsub(pattern = "\\D",
+  #                           replacement = "",
+  #                           x = nu_hh_per_vil,
+  #                           perl = T) %>%
+  #     as.numeric]
+
+
+  # Add an empty row and column
+  avg_pvals <- rbind(NA, avg_pvals, fill = T)
+  # this is done because the plotting function starts at 0 by default not 1
+  # The first value is estimated using 1 hh in 1 village.
+
+
+
+  # List of values to be placed row-wise
+  xvals <-
+    rep(
+      0:l$params$max_hh_sample_per_vil,
+      each = (l$params$max_vil_sampled + 1)
     )
-  )
 
 
-fig
+  # List of values to be placed column-wise
+  yvals <-
+    rep(
+      0:l$params$max_vil_sampled,
+      (l$params$max_hh_sample_per_vil + 1)
+    )
 
 
-tot.m[is.na(tot.m)] <- 0
+  # Matrix of significance
+  sig_star <- matrix(rep("", dim(avg_pvals)[1] * dim(avg_pvals)[2])) %>%
+    matrix(ncol = dim(avg_pvals)[1])
+
+  sig_star[as.matrix(avg_pvals) < 0.10] <- "*"
+  sig_star[as.matrix(avg_pvals) < 0.05] <- "**"
+  sig_star[as.matrix(avg_pvals) < 0.01] <- "***"
+
+
+  # Actual plot
+  plot_ly(z = ~as.matrix(avg_pvals)) %>%
+
+    # Surface plot
+    add_surface(
+
+      hovertext = paste(
+
+        # HH per village text
+        "H.H. per Village:", xvals,
+
+        # Nu. of Villages text
+        "<br>Nu. of Villages:", yvals,
+
+        # P-value and significance text
+        "<br>p-value:", paste0(
+          round(avg_pvals %>% as.matrix, 3), sig_star),
+
+        # Hover on sample size
+        "<br>Sample size: ", paste0(
+
+          # Multiply both values to get sample per group
+          xvals * yvals * 2
+          # multiply by 2 because there are 2 groups - treatment & control
+        )
+      ) %>%
+
+        matrix(ncol = (l$params$max_hh_sample_per_vil + 1)) %>%
+
+        # Plotly maps values in reverse order so one has to transpose
+        # The resulting matrix for proper mapping
+        t,
+
+      hovertemplate = "%{hovertext}<extra></extra>",
+
+      showscale = F
+
+    ) %>%
+
+    # Layout options
+    layout(
+      hoverlabel = list(namelength = 10L),
+
+      # Add margins to the title
+      margin = list(
+        l = 50,
+        r = 50,
+        b = 50,
+        t = 50,
+        pad = 20
+      ),
+
+      # Graph title
+      title = list(
+        text = paste0("P-value for different sample size distributions",
+                      " - effect size: ", eff_size)
+      ),
+
+      scene = list(
+
+        # x-axis options
+        xaxis = list(
+          title = list(
+            text = 'Households per village',
+            font = list(
+              size = 12
+            )
+          )
+        ),
+
+        # y-axis options
+        yaxis = list(
+          title = list(
+            text = 'Villages per treatment group',
+            font = list(
+              size = 12
+            )
+          )
+        ),
+
+        # z-axis options
+        zaxis = list(title = 'P-value'),
+
+        # Camera options
+        camera = list(
+          center = list(
+            x = 0,
+            y = 0,
+            z = -0.3
+          ),
+
+          eye = list(
+            x = 1.4,
+            y = 1.4,
+            z = 1
+          )
+        )
+      )
+    )
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

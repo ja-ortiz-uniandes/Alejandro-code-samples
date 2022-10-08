@@ -1,0 +1,15 @@
+name: r_code_sample_alejandro_ortiz
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+  - R
+dependencies:
+  - r-base=4.2.1
+  - r-plotly=4.10.0
+  - r-fixest=0.10.4
+  - r-tidyverse=1.3.2
+  - r-data.table=1.14.2
+  - r-furrr=0.3.1
+  - r-rmarkdown=2.16
+  - pandoc=2.18
