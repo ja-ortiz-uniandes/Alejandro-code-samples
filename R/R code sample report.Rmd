@@ -1,25 +1,78 @@
 ---
-title: "R code sample"
+title: "R code sample - Simulation"
 author: "Alejandro Ortiz - ja.ortiz@uniandes.edu.co"
-date: "2022-08-28"
-output: html_document
+date: "2022-09-22"
+output: 
+        html_document:
+                toc: true # Table of contents
+                toc_float: true # Table of contents follows reader
 
 abstract: |
- First paragraph of what may be the best abstract ever written. It is a
- beautiful abstract because nobody writes abstracts better than I do.
-
- Second paragraph of the abstract continues to be just magnificent. It is 
- simply because I'm a very stable genius. OK, SERIOUS NOW: HTML code can be
- also added to leave some breating space after abstract such as <br><br><br>
+  Thank you for looking at the report for my simulation code sample in R! This is a report for a project I thought of when I came across while doing a questionnaire for the World Bank's Development Impact Evaluation (DIME). The question was along the lines of: "There is a program that is implemented at the village level. Households within the same village are very similar but households between villages are not. To maximize the likelihood of detecting the programs effect is it better to sample more households within each village or to sample more villages?"
+ 
+  In this report I will answer this question through the use of simulation techniques in which programs with different effect sizes are implemented on a sample of randomly selected villages. I will also go over some of the theory and intuition for the answer and take this opportunity to talk about some sampling techniques, mainly on clustered sampling vs. stratified sampling vs. systematic sampling. However, the main objective of this report is to demonstrate my skills in `R` as such this document will mainly focus on the *code* itself.
 ---
 
-```{r setup, include=FALSE}
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 12px;
+  }
+td {  /* Table  */
+  font-size: 8px;
+}
+h1.title {
+  font-size: 38px;
+  <!-- color: DarkRed; -->
+}
+h1 { /* Header 1 */
+  font-size: 28px;
+  <!-- color: DarkBlue; -->
+}
+h2 { /* Header 2 */
+    font-size: 22px;
+    <!-- color: DarkBlue; -->
+}
+h3 { /* Header 3 */
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  <!-- color: DarkBlue; -->
+}
+code.r{ /* Code block */
+    font-size: 12px;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 14px;
+}
+</style>
+
+
+```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+# A few words on what makes good code
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+for any given problem there are many different solutions and paths. While some paths may be more efficient or shorter than others. There are two necessary conditions for good code. Good code must be:
+
+1.  Functional
+2.  Easy to understand
+
+One can not come at the expense of the other. These principles are behind every decision and form the backbone of every script in every language. I am confident you will see this reflected in my work.
+
+## Styling
+
+One of the most important ways to create good code is to follow good coding practices from the beginning, as going back to fix things will alaways be costlier than starting out the right way. Throughout this report you will see blue text boxes that explain some of the styling decisions made throughout the script to guarantee the functionality and readability.
+
+``` {style="background-color:lightblue"}
+This is an example of a style textbox.
+```
+
+## Reproducibility & Portability
+
+Making sure your code is reproducible and portable is also essential for good code. I always create a new R-project for each assignment, maintain `R`environments through `renv` and detailed records of every change through version control (as you can probably tell by reading this document on GitHub). In fact, this project not only has \`renv\` to increase its reproducibility and portability it also contains a
+
+## comments
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 

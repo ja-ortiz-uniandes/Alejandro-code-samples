@@ -1,4 +1,6 @@
 # Anything that contains ignore
 *ignore*
 
-.Rproj.user
+# Anything that contains debug
+*debug*
+

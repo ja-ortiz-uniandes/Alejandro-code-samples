@@ -9,10 +9,9 @@
 
 # This project uses renv to so it is portable and reproducible
 
-
 # This is the an exercise that models a question from DIME.
 
-# Clustered vs. Stratified vs. Systematic Sampling
+
 
 
 # Set up                                                                    ----
@@ -119,7 +118,7 @@ l$opts$selct_params_in_file <- list("eff" = quote(eff_size))
 
 
 
-# Warnings and error handling coming in the future
+# in future - Warnings and error handling
 
 
 
@@ -369,8 +368,8 @@ for (
     # Verbalize iteration and time
     cat(
       paste0(
-        "\nFinished cycle: ", iter, " - for effect size: ", eff_size,
-        "\n", Sys.time(), "\n")
+        "Finished cycle: ", iter, " - for effect size: ", eff_size,
+        "\n", Sys.time(), "\n\n")
     )
 
     flush.console()
@@ -438,10 +437,7 @@ for (file in list.files("Outputs/HH - Village surface/",
 
 
   # Import data
-  avg_pvals <- fread(paste0("Outputs/HH - Village surface/",
-                            "Homogeneous effects ",
-                            file_details,
-                            ".csv"), yaml = T)
+  avg_pvals <- fread(file, yaml = T)
 
 
   # # Transform matrix into a long-format data.table
@@ -470,6 +466,10 @@ for (file in list.files("Outputs/HH - Village surface/",
   # this is done because the plotting function starts at 0 by default not 1
   # The first value is estimated using 1 hh in 1 village.
 
+  # in-future - apply NA first row, fix column names and make first variable the
+  # number of villages per treatment group (as string so as.matrix will
+  # automatically convert them to NA)
+
 
 
   # List of values to be placed row-wise
@@ -478,6 +478,7 @@ for (file in list.files("Outputs/HH - Village surface/",
       0:l$params$max_hh_sample_per_vil,
       each = (l$params$max_vil_sampled + 1)
     )
+  # in future - get all attributes from file
 
 
   # List of values to be placed column-wise
@@ -495,6 +496,14 @@ for (file in list.files("Outputs/HH - Village surface/",
   sig_star[as.matrix(avg_pvals) < 0.10] <- "*"
   sig_star[as.matrix(avg_pvals) < 0.05] <- "**"
   sig_star[as.matrix(avg_pvals) < 0.01] <- "***"
+
+
+  # Extract effect size from title
+  eff_size <-
+    gsub(pattern = ".*eff_(\\d*\\.\\d*).*",
+         replacement = "\\1",
+         x = file,
+         perl = T)
 
 
   # Actual plot
@@ -595,7 +604,7 @@ for (file in list.files("Outputs/HH - Village surface/",
           )
         )
       )
-    )
+    ) %>% print
 
 
 }
