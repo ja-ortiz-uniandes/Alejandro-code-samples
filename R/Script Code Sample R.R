@@ -188,7 +188,9 @@ gen_village <- function() {
 # Parallelization function
 change_hh_size <-
   function(nu_of_villages, universe,
-           max_nu_hh_per_vil = l$params$max_hh_sample_per_vil) {
+           max_nu_hh_per_vil = l$params$max_hh_sample_per_vil,
+           return_messages = F, return_warnings = F
+  ) {
 
     # This functions takes the number of villages to be sampled per treatment
     # group (nu_of_villages) and a data set of the universe of villages and
@@ -205,7 +207,7 @@ change_hh_size <-
     require(fixest)
 
     # Pre-allocate space for results into memory
-    pval_results <- vector(length = max_nu_hh_per_vil)
+    pval_results <- vector("numeric", length = max_nu_hh_per_vil)
 
 
     # Loop over HHs sampled in each village
@@ -221,6 +223,11 @@ change_hh_size <-
         v_sample,
         universe[treatead != 1, unique(.SD), .SDcols = "village"
         ][sample(.N, size = nu_of_villages)])
+
+
+      # Temporary result template
+      tmp <- 0
+      # Used so furrr - can transport the object
 
 
       # From a simple OLS - get the p-value for treated dummy
@@ -243,7 +250,21 @@ change_hh_size <-
             )[["coeftable"]][["Pr(>|t|)"]][3]
         },
 
-        warning = function(war) {}
+        warning = function(war) {
+
+          # Return warning if necessary
+          if (return_warnings) {
+            war
+          }
+        },
+
+        message = function(mes) {
+
+          # Return message if necessary
+          if (return_messages) {
+            mes
+          }
+        }
       )
 
       # Save to result vector
@@ -279,7 +300,7 @@ for (
     # row number is equal to number of villager per treatment group
 
     ncol = l$params$max_hh_sample_per_vil)
-  # column number is equal to number of HHs per village
+    # column number is equal to number of HHs per village
 
 
   # Matrix must not be NA or operations will only yield NA
@@ -366,7 +387,7 @@ for (
                " Iteration: ", iter)
       )
     }
-    tmp_mat[is.na(tmp_mat)] <- 0
+    tmp_mat[is.na(tmp_mat)] <- 1
 
 
     # Add results from previous iterations
@@ -415,8 +436,21 @@ for (
   }
 
 
+  # Transform to data.table
+  avg_pvals <- avg_pvals %>% as.data.table
+
+
+  # Bulk rename
+  names(avg_pvals) <- paste("HH_per_vil", 1:l$params$max_hh_sample_per_vil,
+                             sep = ".")
+
+
+  # Add variable indicating the number of villages
+  avg_pvals[, nu_villages := 1:.N]
+
+
   # Save result
-  fwrite(avg_pvals %>% as.data.table,
+  fwrite(avg_pvals,
          paste0("Outputs/HH - Village surface/",
                 "Homogeneous effects ",
                 file_details,
@@ -431,7 +465,8 @@ plan(sequential)
 
 
 # Clean up after loop
-remove(list = ls())
+remove(list = ls()[!ls() == "l"])
+
 
 
 
