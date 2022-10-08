@@ -1,0 +1,391 @@
+---
+title: "R code sample - Simulation"
+author: "Alejandro Ortiz - ja.ortiz@uniandes.edu.co"
+date: "2022-09-22"
+output: 
+        html_document:
+                toc: true # Table of contents
+                toc_float: true # Table of contents follows reader
+
+abstract: |
+  Thank you for looking at the report for my simulation code sample in `R`! This is a report for a project I thought of when I came across while doing a questionnaire for the World Bank's Development Impact Evaluation (DIME). The question was along the lines of: "*There is a program that is implemented at the village level. Households within the same village are very similar but households between villages are not. To maximize the likelihood of detecting the programs effect is it better to sample more households within each village or to sample more villages?*"
+ 
+  In this report I will answer this question through the use of simulation techniques in which programs with different effect sizes are implemented on a sample of randomly selected villages. I will also go over some of the theory and intuition for the answer and take this opportunity to talk about some sampling techniques, mainly on clustered sampling vs. stratified sampling vs. systematic sampling. However, the main objective of this report is to demonstrate my skills in `R` as such this document will mainly focus on the *code* itself.
+---
+
+```{=html}
+<style type = "text/css">
+
+body{ /* Normal  */
+      font-size: 16px;
+  }
+td {  /* Table  */
+  font-size: 8px;
+}
+h1.title {
+  font-size: 40px;
+  <!-- color: DarkRed; -->
+}
+h1 { /* Header 1 */
+  font-size: 30px;
+  <!-- color: DarkBlue; -->
+}
+h2 { /* Header 2 */
+    font-size: 24px;
+    <!-- color: DarkBlue; -->
+}
+h3 { /* Header 3 */
+  font-size: 20px;
+  font-family: "Times New Roman", Times, serif;
+  <!-- color: DarkBlue; -->
+}
+code.r{ /* Code block */
+    font-size: 14px;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 16px;
+}
+</style>
+```
+```{r setup, include = FALSE}
+
+
+# Set up                                                                    ----
+
+
+# Clean - R's environment
+# .rs.restartR()
+cat("\f")
+# dev.off()
+remove(list = ls())
+gc(full = T)
+
+
+# Publish working directory
+getwd()
+
+
+# Set options
+# options(java.parameters = "-Xmx8000m")
+options(max.print = 200)
+
+
+# Update and load packages
+# update.packages(ask = F)
+library(plotly)
+library(furrr)
+library(fixest)
+library(tidyverse)
+library(data.table)
+
+
+
+# Hyper-parameter dashboard                                                 ----
+
+
+# Hyper-parameters list template
+l <- list()
+
+
+# Maximum number of households sampled per village
+l$params$max_hh_sample_per_vil <- 50
+
+
+# Maximum number of villages sampled per treatment group
+l$params$max_vil_sampled <- 50
+
+
+# Minimum effect size
+l$params$min_effect_size <- 0.1
+
+
+# Maximum effect size
+l$params$max_effect_size <- 0.3
+
+
+# Effect size step
+l$params$effect_size_step <- 0.05
+
+
+# Number of times to run simulation over the same sample parameters
+l$params$nu_simulations <- 10^4
+
+
+# Minimum number of villages in the population
+l$params$min_vils_in_universe <- 200
+
+
+# Minimum number of HH per village in population
+l$params$min_vil_size <- 50
+
+
+# Maximum number of HH per village in population
+l$params$max_vil_size <- 200
+
+
+# Independent probability of a village being treated
+l$params$prob_vil_is_treated <- 0.5
+
+
+# Minimum value of the mean of baseline score
+l$params$bl_min_mean_val <- 2
+
+
+# Maximum value of the mean of baseline score
+l$params$bl_max_mean_val <- 100
+
+
+# Minimum value of the sd of baseline score
+l$params$bl_min_sd_val <- 0.5
+
+
+# Maximum value of the sd of baseline score
+l$params$bl_max_sd_val <- 1.5
+
+
+## Not Simulation parameters but options
+# Save full list of hyper-parameters in file name?
+l$opts$full_params_in_file <- F
+
+
+# Select parameters to include in file name in case
+# l$params$full_params_in_file == F
+l$opts$selct_params_in_file <- list("eff" = quote(eff_size))
+
+
+
+# in future - Warnings and error handling
+
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# A few words on what makes good code
+
+for any given problem there are many different solutions and paths. While some paths may be more efficient or shorter than others. There are two necessary conditions for good code. Good code must be:
+
+1.  Functional
+2.  Easy to understand
+
+One can not come at the expense of the other. These principles are behind every decision and form the backbone of every script in every language. I am confident you will see this reflected in my work.
+
+## Styling
+
+One of the most important ways to create good code is to follow good coding practices from the beginning, as going back to fix things will always be costlier than starting out the right way. Throughout this report you will see blue text boxes that explain some of the styling decisions made throughout the script to guarantee the functionality and readability.
+
+``` {style="background-color:lightblue"}
+This is an example of a style textbox.
+```
+
+Formal writing and academic writing disclamer XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+plural first person active voice is used to engage with the reader
+
+## Reproducibility & Portability
+
+Making sure your code is reproducible and portable is also essential for good code. I always create a new R-project for each assignment, maintain `R`environments through `renv` and detailed records of every change through version control (as you can probably tell by reading this document on GitHub). In fact, this project not only has `renv` to increase its reproducibility and portability it also contains a `mamba` directory with the `.Rprofile` and `config.yml` files needed to guarantee that no matter when or in what system, **this project is 100% reproducible and portable**. Just remeber not to use `mamaba` and `renv` as they can conflict with each oter.
+
+## Feedback
+
+Fedback here XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+
+# Problem statement
+
+This is a question I came across while completing a questionnaire for the World Bank's Development and Impact Evaluation ([DIME](https://www.worldbank.org/en/research/dime)). While not a verbatum quote, the question was:
+
+> There is a program that is implemented at the village level. Households within the same village are very similar but households between villages are not. To maximize the likelihood of detecting the programs effect is it better to sample more households within each village or to sample more villages?
+
+Intuitively one may think that it s better to sample more villages. If households within each village are similar then the information that an additional household from a village that has already been sampled contributes to the regression is less than a household from village that is unsampled and which there for, different to all the other households in the sample.
+
+<!--#Moreover, increasing the number of villages while maintaining the number of observations is likely to result in an increase to the estimated functions domain.  -->
+
+# Visualizing the result of different sampling strategies
+
+```{r plotlyresults, echo = FALSE}
+
+
+# Plot list template
+pval_plots <- list()
+
+
+# Generate plots by looping over effect size
+for (file in list.files("Outputs/HH - Village surface/",
+                        pattern = "Homogeneous effects",
+                        full.names = T)) {
+
+
+  # Import data
+  avg_pvals <- fread(file, yaml = T)
+
+
+  # Add an empty row and column
+  avg_pvals <- rbind(NA, avg_pvals, fill = T)
+  # this is done because the plotting function starts at 0 by default not 1
+  # The first value is estimated using 1 hh in 1 village.
+
+  # in-future - apply NA first row, fix column names and make first variable the
+  # number of villages per treatment group (as string so as.matrix will
+  # automatically convert them to NA)
+
+
+
+  # List of values to be placed row-wise
+  xvals <-
+    rep(
+      0:l$params$max_hh_sample_per_vil,
+      each = (l$params$max_vil_sampled + 1)
+    )
+  # in future - get all attributes from file
+
+
+  # List of values to be placed column-wise
+  yvals <-
+    rep(
+      0:l$params$max_vil_sampled,
+      (l$params$max_hh_sample_per_vil + 1)
+    )
+
+
+  # Matrix of significance
+  sig_star <- matrix(rep("", dim(avg_pvals)[1] * dim(avg_pvals)[2])) %>%
+    matrix(ncol = dim(avg_pvals)[1])
+
+  sig_star[as.matrix(avg_pvals) < 0.10] <- "*"
+  sig_star[as.matrix(avg_pvals) < 0.05] <- "**"
+  sig_star[as.matrix(avg_pvals) < 0.01] <- "***"
+
+
+  # Extract effect size from title
+  eff_size <-
+    gsub(pattern = ".*eff_(\\d*\\.\\d*).*",
+         replacement = "\\1",
+         x = file,
+         perl = T)
+
+
+  # Actual plot
+  pval_plots[[paste0("eff_", eff_size)]] <-
+    plot_ly(z = as.matrix(avg_pvals)) %>%
+
+    # Surface plot
+    add_surface(
+
+      hovertext = paste(
+
+        # HH per village text
+        "H.H. per Village:", xvals,
+
+        # Nu. of Villages text
+        "<br>Nu. of Villages:", yvals,
+
+        # P-value and significance text
+        "<br>p-value:", paste0(
+          round(avg_pvals %>% as.matrix, 3), sig_star),
+
+        # Hover on sample size
+        "<br>Sample size: ", paste0(
+
+          # Multiply both values to get sample per group
+          xvals * yvals * 2
+          # multiply by 2 because there are 2 groups - treatment & control
+        )
+      ) %>%
+
+        matrix(ncol = (l$params$max_hh_sample_per_vil + 1)) %>%
+
+        # Plotly maps values in reverse order so one has to transpose
+        # The resulting matrix for proper mapping
+        t,
+
+      hovertemplate = "%{hovertext}<extra></extra>",
+
+      showscale = F
+
+    ) %>%
+
+    # Layout options
+    layout(
+      hoverlabel = list(namelength = 10L),
+
+      # Add margins to the title
+      margin = list(
+        l = 50,
+        r = 50,
+        b = 50,
+        t = 50,
+        pad = 20
+      ),
+
+      # Graph title
+      title = list(
+        text = paste0("P-value for different sample size distributions",
+                      " - effect size: ", eff_size)
+      ),
+
+      scene = list(
+
+        # x-axis options
+        xaxis = list(
+          title = list(
+            text = 'Households per village',
+            font = list(
+              size = 12
+            )
+          )
+        ),
+
+        # y-axis options
+        yaxis = list(
+          title = list(
+            text = 'Villages per treatment group',
+            font = list(
+              size = 12
+            )
+          )
+        ),
+
+        # z-axis options
+        zaxis = list(title = 'P-value'),
+
+        # Camera options
+        camera = list(
+          center = list(
+            x = 0,
+            y = 0,
+            z = -0.3
+          ),
+
+          eye = list(
+            x = 1.4,
+            y = 1.4,
+            z = 1
+          )
+        )
+      )
+    )
+}
+```
+
+As mentioned above, intuitively one might expect that sampling households from different villages would increase the statistical significance of the estimator. Lets take a look at the first graph. It's worth saying that all these graphs are interactive yo you may pan, rotate, zoom, etc. as well as hover over the plot to see the number of villages per each treatment group (i.e. treated and control), total sample size and the p-vale with '*' at each of the usual significance thresholds (10%, 5%, 1%).
+
+```{r plotly_graph_0.1, echo = F}
+
+pval_plots$eff_0.1
+```
+
+From this graph it is not immediately obvious that either sampling strategy is better than the other. In fact, it seems as if the surface descends at the same rate regardless if you are increasing the number of households per village or if you are increasing the number of villages per treatment group. Additionally, the surface of this graph is very rough, there are many local maxima and local minima scattered throughout. This is of course expected as a result from idiosyncratic errors. However it is nevertheless surprising as this graph shows the average p-value over 1000x runs.
+
+Let's now see how this graph changes as we increase the effect size. Once again I encourage you to explore each graph.
+
+```{r plotly_other_graphs, echo = F}
+
+pval_plots$eff_0.15
+pval_plots$eff_0.2
+pval_plots$eff_0.25
+pval_plots$eff_0.3
+```
+
+# Getting the results
+
+
+

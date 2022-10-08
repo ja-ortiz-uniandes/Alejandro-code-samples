@@ -430,7 +430,11 @@ remove(list = ls())
 # Interactive plotly results                                                ----
 
 
-# loop over effect size
+# Plot list template
+pval_plots <- list()
+
+
+# Generate plots by looping over effect size
 for (file in list.files("Outputs/HH - Village surface/",
                         pattern = "Homogeneous effects",
                         full.names = T)) {
@@ -507,7 +511,8 @@ for (file in list.files("Outputs/HH - Village surface/",
 
 
   # Actual plot
-  plot_ly(z = ~as.matrix(avg_pvals)) %>%
+  pval_plots[[paste0("eff_", eff_size)]] <-
+    plot_ly(z = as.matrix(avg_pvals)) %>%
 
     # Surface plot
     add_surface(
@@ -604,15 +609,14 @@ for (file in list.files("Outputs/HH - Village surface/",
           )
         )
       )
-    ) %>% print
-
-
+    )
 }
 
 
 
 
 
+htmltools::tagList(pval_plots)
 
 
 
