@@ -3,13 +3,12 @@
 
 # By: Alejandro Ortiz - ja.ortiz@uniandes.edu.co
 
+# This is the an exercise that models a question from DIME.
 
-# IMPORATANT
+
+# IMPORATANT !!
 # Please look at the HTML report before looking at this script
 
-# This project uses renv to so it is portable and reproducible
-
-# This is the an exercise that models a question from DIME.
 
 
 
@@ -21,8 +20,8 @@
 # .rs.restartR()
 cat("\f")
 # dev.off()
-remove(list = ls())
-gc(full = T)
+remove(list = ls()); gc(full = T)
+
 
 
 # Publish working directory
@@ -36,9 +35,17 @@ options(max.print = 200)
 
 # Update and load packages
 # update.packages(ask = F)
+
+# Plot results
 library(plotly)
+
+# Paralelization
 library(furrr)
+
+# Estimation
 library(fixest)
+
+# Core
 library(tidyverse)
 library(data.table)
 

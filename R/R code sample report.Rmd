@@ -18,6 +18,7 @@ abstract: |
 
 body{ /* Normal  */
       font-size: 16px;
+      text-align: justify
   }
 td {  /* Table  */
   font-size: 8px;
@@ -77,6 +78,7 @@ library(furrr)
 library(fixest)
 library(tidyverse)
 library(data.table)
+
 
 
 
@@ -160,6 +162,9 @@ l$opts$selct_params_in_file <- list("eff" = quote(eff_size))
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
+
+
 # A few words on what makes good code
 
 for any given problem there are many different solutions and paths. While some paths may be more efficient or shorter than others. There are two necessary conditions for good code. Good code must be:
@@ -173,21 +178,19 @@ One can not come at the expense of the other. These principles are behind every 
 
 One of the most important ways to create good code is to follow good coding practices from the beginning, as going back to fix things will always be costlier than starting out the right way. Throughout this report you will see blue text boxes that explain some of the styling decisions made throughout the script to guarantee the functionality and readability.
 
-``` {style="background-color:lightblue"}
+``` {r class.source = "bg-info text-info", eval=F}
 This is an example of a style textbox.
 ```
 
-Formal writing and academic writing disclamer XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-plural first person active voice is used to engage with the reader
+Everything in this report is my own work with all relevant citations included. However, you will find that plural first person active voice is often used throughout. This is a deliberate choice. In these cases "we" refers to me (the author of the report) and you (the reader). This is meant to make the report more engaging and less formal. This is not a formal writing sample, as the main purpose of this document is to showcase my programming abilities and experience in `R`. If you wish to see a formal or an academic writing sample please [write me an email](mailto:ja.ortiz@uniandes.edu.co).
 
 ## Reproducibility & Portability
 
-Making sure your code is reproducible and portable is also essential for good code. I always create a new R-project for each assignment, maintain `R`environments through `renv` and detailed records of every change through version control (as you can probably tell by reading this document on GitHub). In fact, this project not only has `renv` to increase its reproducibility and portability it also contains a `mamba` directory with the `.Rprofile` and `config.yml` files needed to guarantee that no matter when or in what system, **this project is 100% reproducible and portable**. Just remeber not to use `mamaba` and `renv` as they can conflict with each oter.
+Making sure your code is reproducible and portable is also essential for good code. I always create a new R-project for each assignment, maintain `R`environments through `renv` and detailed records of every change through version control (as you can probably tell by reading this document on GitHub). In fact, this project not only has `renv` to increase its reproducibility and portability it also contains a `mamba` directory with the `.Rprofile` and `config.yml` files needed to guarantee that no matter when or in what system, the process and results can be replicated. This means that **this project is 100% reproducible and portable**. Just remember not to use `mamaba` and `renv` simultaneously as they can conflict with each other.
 
 ## Feedback
 
-Fedback here XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
+I believe feedback is incredibly valuable. Because of this, if you have any ideas, comments, criticisms, questions, advice, or if you find a mistakes or are having trouble replicating the results **please let me know**. After reading this report, I would highly appreciate it if you could complete [my survey](google.com) on the general perceptions of my dossier. Likewise, if you have any specific inquiries feel free to contact me though my email [ja.ortiz\@uniandes.edu.co](mailto:ja.ortiz@uniandes.edu.co){.email}.
 
 # Problem statement
 
@@ -195,11 +198,11 @@ This is a question I came across while completing a questionnaire for the World 
 
 > There is a program that is implemented at the village level. Households within the same village are very similar but households between villages are not. To maximize the likelihood of detecting the programs effect is it better to sample more households within each village or to sample more villages?
 
-Intuitively one may think that it s better to sample more villages. If households within each village are similar then the information that an additional household from a village that has already been sampled contributes to the regression is less than a household from village that is unsampled and which there for, different to all the other households in the sample.
+Intuitively one may think that it s better to sample more villages. If households within each village are similar then the information that an additional household from a village that has already been sampled contributes to the regression is than the information contributed from a household from village that is unsampled and which there for, is different to all the other households in the sample.
 
 <!--#Moreover, increasing the number of villages while maintaining the number of observations is likely to result in an increase to the estimated functions domain.  -->
 
-# Visualizing the result of different sampling strategies
+# Visualizing different sampling strategies
 
 ```{r plotlyresults, echo = FALSE}
 
@@ -366,18 +369,18 @@ for (file in list.files("Outputs/HH - Village surface/",
 }
 ```
 
-As mentioned above, intuitively one might expect that sampling households from different villages would increase the statistical significance of the estimator. Lets take a look at the first graph. It's worth saying that all these graphs are interactive yo you may pan, rotate, zoom, etc. as well as hover over the plot to see the number of villages per each treatment group (i.e. treated and control), total sample size and the p-vale with '*' at each of the usual significance thresholds (10%, 5%, 1%).
+As mentioned above, intuitively one might expect that sampling households from different villages would increase the statistical significance of the estimator. Lets take a look at the first graph. It's worth saying that all these graphs are interactive yo you may pan, rotate, zoom, etc. as well as hover over the plot to see the number of villages per each treatment group (i.e. treated and control), total sample size and the p-vale with '\*' at each of the usual significance thresholds (10%, 5%, 1%).
 
-```{r plotly_graph_0.1, echo = F}
+```{r plotly-graph-0.1, echo = F}
 
 pval_plots$eff_0.1
 ```
 
-From this graph it is not immediately obvious that either sampling strategy is better than the other. In fact, it seems as if the surface descends at the same rate regardless if you are increasing the number of households per village or if you are increasing the number of villages per treatment group. Additionally, the surface of this graph is very rough, there are many local maxima and local minima scattered throughout. This is of course expected as a result from idiosyncratic errors. However it is nevertheless surprising as this graph shows the average p-value over 1000x runs.
+From this graph it is not immediately obvious that either sampling strategy is better than the other. In fact, it seems as if the surface descends at the same rate regardless if you are increasing the number of households per village or if you are increasing the number of villages per treatment group. Additionally, the surface of this graph is very rough, there are many local maxima and local minima scattered throughout. This is of course expected as a result from idiosyncratic errors and sample variance. However it is nevertheless surprising, as this graph shows the average p-value over 1000x runs.
 
 Let's now see how this graph changes as we increase the effect size. Once again I encourage you to explore each graph.
 
-```{r plotly_other_graphs, echo = F}
+```{r other-plotly-graphs, echo = F}
 
 pval_plots$eff_0.15
 pval_plots$eff_0.2
@@ -385,7 +388,165 @@ pval_plots$eff_0.25
 pval_plots$eff_0.3
 ```
 
+From the graphs above, it is easier to see that a pattern starts to emerge. Perhaps the most noticeable thing is how quickly the effects become significant (thus far we haven't looked at the estimators. For now, just know that in this context they are consistent and unbiased). The second most noticeable thing is how much smoother the surface is. In part this is due to the zero lower bound on p-values and in part it is the result of the surface 'stretching' as p-values decrease faster the larger the effect is.
+
+Thirdly, and perhaps most importantly, by playing around with the graphs one might find that increasing the number of villages per treatment group is more effective at reducing the p-value than increasing the number of households per village.
+
+By hoovering your mouse over the graphs you'll see that for any given sample size, the p-value is lower in cases where there are more villages per group than households per village. That is to say that if you looked at the surface from above so that you only saw the x (Households per village) and y (Villages per treatment group) axis, and drew a 45° line on $y = x$, the values above the line (i.e. more villages than households) will in average be lower than values below the line (i.e. more households than villages). In other words, the surface is slanted so that increasing the number of villages will lower the p-value more than increasing the number of households. The clearest sign of this can be seen on the slanted border on the right side of the initial view (i.e. $Households\ per \ village = 1$). the surface limit reduces as the number of villages increases whereas on the opposite border,(i.e. $Villages\ per\ treatment\ group = 1$) the surface value remains at the same level regardless if the number of households sampled per village is 50 or 2.
+
 # Getting the results
 
+After looking at the results we now turn our attention to process. This is the part where we take an in-depth look at the code.
 
+## Script groundwork
+
+The script starts with some metadata. This is the scripts title, the author and a brief description of what this script does. In this case the script also includes a warning to look at this report before looking at the script itself.
+
+```{r}
+# Code sample R
+
+# By: Alejandro Ortiz - ja.ortiz@uniandes.edu.co
+
+# This is the an exercise that models a question from DIME.
+
+
+# IMPORATANT !!
+# Please look at the HTML report before looking at this script
+
+```
+
+Next comes the `Set up` section. The section begins with a series of commands to clean `R`'s environment by clearing the console, the ploting device, as well as any environment variables or objects and preforming some memory clean up. Here, the working directory is also printed to console (in the past this has spared me form a *lot* of confusion when opening a script and not realizing the project in which it its opened). There is also a setting to change the maximum console output to 200 (don from the default of 1000) as I find 200 is more that enough for any type of work limiting this setting is important because helps to keep track of executions, maintain order in the console, and helps you better understand console of outputs. Finally, the relevant packages are loaded they are grouped according to their function and the most important packages are **always** placed last to prevent masking by other packages. As you can see the most important packages are `tydiverse` and `data.table` , two amazing pieces of software that make `R` what it is today.
+
+```{r set-up, results='hide'}
+# Set up                                                                    ----
+
+
+# Clean - R's environment
+# .rs.restartR()
+cat("\f")
+# dev.off()
+remove(list = ls()); gc(full = T)
+
+
+# Publish working directory
+getwd()
+
+
+# Set options
+# options(java.parameters = "-Xmx8000m")
+options(max.print = 200)
+
+
+# Update and load packages
+# update.packages(ask = F)
+
+# Plot results
+library(plotly)
+
+# Paralelization
+library(furrr)
+
+# Estimation
+library(fixest)
+
+# Core
+library(tidyverse)
+library(data.table)
+```
+
+
+```{r class.output = "bg-info text-info", echo=F, comment=NA }
+cat('options(java.parameters = "-Xmx8000m")
+Is useful when working with rJava, even though it is not used here I keep it in the set up as a reminder that Java can run into memory problems if this setting is not enabled. This way if in the future any Java is used this option can be easily enabled.')
+```
+
+## Hyper-parameters
+
+The question is quite broad, and hence it's abstracted from a lot of the details needed for the simulation. These details are all compiled in the next section titled `Hyper-parameter dashboard`. In here it's possible to easily change all of these hyper-parameters such as the minimum and the maximum number of households per village. This section also includes some options used for exporting the results. However, looking at these parameters without knowing what context they are used in isn't very useful. So I wont go into much detail here, instead I'll simply say that all these user-defined values are stored in a list of two elements. The first one is the hyper-parameters, i.e. things that directly influence the outcome of the simulation. The second is the options, i.e. things that affect how the results are presented but leave the actual values the same.
+
+```{r, attr.source='style="max-height: 300px;"'}
+# Hyper-parameter dashboard                                                 ----
+
+
+# Hyper-parameters list template
+l <- list()
+
+
+# Maximum number of households sampled per village
+l$params$max_hh_sample_per_vil <- 50
+
+
+# Maximum number of villages sampled per treatment group
+l$params$max_vil_sampled <- 50
+
+
+# Minimum effect size
+l$params$min_effect_size <- 0.1
+
+
+# Maximum effect size
+l$params$max_effect_size <- 0.3
+
+
+# Effect size step
+l$params$effect_size_step <- 0.05
+
+
+# Number of times to run simulation over the same sample parameters
+l$params$nu_simulations <- 10^4
+
+
+# Minimum number of villages in the population
+l$params$min_vils_in_universe <- 200
+
+
+# Minimum number of HH per village in population
+l$params$min_vil_size <- 50
+
+
+# Maximum number of HH per village in population
+l$params$max_vil_size <- 200
+
+
+# Independent probability of a village being treated
+l$params$prob_vil_is_treated <- 0.5
+
+
+# Minimum value of the mean of baseline score
+l$params$bl_min_mean_val <- 2
+
+
+# Maximum value of the mean of baseline score
+l$params$bl_max_mean_val <- 100
+
+
+# Minimum value of the sd of baseline score
+l$params$bl_min_sd_val <- 0.5
+
+
+# Maximum value of the sd of baseline score
+l$params$bl_max_sd_val <- 1.5
+
+
+## Not Simulation parameters but options
+# Save full list of hyper-parameters in file name?
+l$opts$full_params_in_file <- F
+
+
+# Select parameters to include in file name in case
+# l$params$full_params_in_file == F
+l$opts$selct_params_in_file <- list("eff" = quote(eff_size))
+
+
+```
+
+```{r class.output = "bg-info text-info", echo=F, comment=NA }
+cat('Hyper parameters are placed on a list so they are 1) easy to acess while 2) ony taking up 1 slot in the global environement')
+```
+
+In the future, warning and error handling will be applied to make sure that all values are consistent with each other (to prevent things like the maximum value being lower than the minimum).
+
+## Simulations
+
+The thirs code section is titled `Simulations` this is where the actual simulations take place. **I highly recommend you change the hyper parameters before you attempt to run this section** as the default values can be quite onerous on your system. It took me around one day to execute this part alone. This, in spite of the code being fully parallelepiped and achieving a consistent CPU utilization of over 99% on all cores.
 
