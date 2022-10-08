@@ -6,7 +6,8 @@
 .Ruserdata
 
 # any files named with debug in their name
-.*debug.*
+*debug*
+
 
 # renv directory
 renv/

@@ -1,4 +1,4 @@
 # Anything that contains ignore
-.*ignore.*
+*ignore*
 
 .Rproj.user

@@ -35,7 +35,7 @@ options(max.print = 200)
 # Update and load packages
 # update.packages(ask = F)
 library(plotly)
-library(parallel)
+library(furrr)
 library(fixest)
 library(tidyverse)
 library(data.table)
