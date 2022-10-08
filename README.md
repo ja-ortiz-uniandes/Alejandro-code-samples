@@ -1,8 +1,50 @@
-# Alejandro Ortiz code sample portfolio
+# Alejandro Ortiz Code samples & projects!  <!-- omit in toc --> 
 
-Thank you for visiting my repo for my code samples !
+Thank you for visiting the repo for my code samples and projects!
 
-It is recommended to look at the Associated report, before looking at the the actual script or markdown file.
+For each project, it's recommended to look at the associated report first before looking at the the actual script or markdown file.
+
+## What's in this repo  <!-- omit in toc --> 
+
+This repo is in V 0.8. This is the first version with a fully deployed project. Over time, this repo will continue to grow with the inclusion of new projects and the sophistication of existing ones. I have many interesting ideas I'm eager to make a reality, but if you are looking for any particular use case or language feel free to contact me!
+
+This README file is structured as follows:
+
+- [Languages](#languages)
+- [Contact](#contact)
+- [Known issues](#known-issues)
+- [License](#license)
+
+## Languages
+
+This the list of languages included and upcoming.
+
+
+| Language / technology | Implementation status              | topic                                                                                                                                                               |
+| --------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R                     | In portfolio with more coming soon | Econometrics, visualization, simulation, data mining, among others.                                                                                                 |
+| Python                | In development                     | NLP, various forms of ML, AI, Web scraping, bot programming, data wrangling, visualizations, among others.                                                          |
+| MATLAB                | In development                     | Simulations, estimations, and modelling.                                                                                                                            |
+| Stata                 | In development                     | Econometrics, data wrangling, visualizations, among others.                                                                                                         |
+| GIS                   | In development                     | Mapping raw image data into a usable format, visualization of geo-referenced data, Integration of multi-level data.                                                 |
+| Julia                 | Coming soon                        | Econometrics, data wrangling, visualizations, among others.                                                                                                         |
+| SQL                   | Coming soon                        | Querying relational databases, exporting relational data into flat files, creating relational databases from scratch, joining tables, among others.                 |
+| ODK                   | In development                     | Creating, deploying, overseeing forms. Replication of national questionnaires.                                                                                      |
+| Tableau               | Coming soon                        | Creating interactive dashboards for data visualization, summary and generating reports; exporting data, creating stories, establishing hierarchies, amongst others. |
+| Power BI              | Coming soon                        | Creating interactive dashboards for data visualization, summary and generating reports; exporting data, creating stories, establishing hierarchies, amongst others. |
+| LaTeX                 | Coming soon                        | Creating mathematical equations, special formatting for static publishing.                                                                                          |
+| HTML & CSS            | In portfolio with more coming soon | Creating interactive visualizations, report writing and publishing results. results                                                                                 |
+| YAML & JSON           | In portfolio with more coming soon | Specific metadata creation, manipulation, and extraction.                                                                                                           |
+| REGEX                 | In development                     | String matching with groups, replacements optional characters in  range, negative & positive lookaheads, anchors, and recursive statements.                         |
+
+
+## Contact
+
+Please don't hesitate to write me an email if you find any issues, problems, or if you have any comments, suggestions, or questions.  
+
+## Known issues
+
+None at the time of writing. If you know of any please create an issue, or email me directly.
 
 ## License
 
